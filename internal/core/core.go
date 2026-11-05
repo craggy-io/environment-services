@@ -23,6 +23,7 @@ import (
 	"github.com/craggy-io/environment-services/internal/signalcore"
 	"github.com/craggy-io/environment-services/internal/store"
 	"github.com/craggy-io/environment-services/internal/vault"
+	"github.com/craggy-io/foundation-kit/fsx"
 )
 
 // Clock abstracts time for tests.
@@ -133,7 +134,7 @@ type provisionCall struct {
 type Manager struct {
 	cfg   Config
 	store *store.Store
-	lockF *os.File
+	lock  *fsx.Lock
 	clock Clock
 
 	mu           sync.Mutex
@@ -195,20 +196,25 @@ func Open(ctx context.Context, c Config) (*Manager, error) {
 		c.Quotas = defaultQuotas
 	}
 
-	lockF, err := acquireLock(filepath.Join(c.Dir, "manager.lock"))
+	// An OS file lock, so a crashed manager never leaves a stale lock.
+	lockPath := filepath.Join(c.Dir, "manager.lock")
+	lock, err := fsx.TryLock(lockPath)
 	if err != nil {
+		if errors.Is(err, fsx.ErrLocked) {
+			return nil, fmt.Errorf("core: another manager owns %s (single controller per Dir): %w", lockPath, err)
+		}
 		return nil, err
 	}
 	st, err := store.Open(filepath.Join(c.Dir, "state.db"))
 	if err != nil {
-		releaseLock(lockF)
+		_ = lock.Unlock()
 		return nil, err
 	}
 	_ = os.RemoveAll(filepath.Join(c.Dir, "tmp"))
 	_ = os.MkdirAll(filepath.Join(c.Dir, "tmp"), 0o755)
 
 	m := &Manager{
-		cfg: c, store: st, lockF: lockF,
+		cfg: c, store: st, lock: lock,
 		profiles:     map[string]*profileState{},
 		runtime:      map[string]*runtimeEnv{},
 		provisions:   map[string]*provisionCall{},
@@ -1235,8 +1241,8 @@ func (m *Manager) shutdown() {
 	if m.store != nil {
 		_ = m.store.Close()
 	}
-	if m.lockF != nil {
-		releaseLock(m.lockF)
+	if m.lock != nil {
+		_ = m.lock.Unlock()
 	}
 }
 

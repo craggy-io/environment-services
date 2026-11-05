@@ -15,9 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "modernc.org/sqlite"
-
 	"github.com/craggy-io/environment-services/envspec"
+	"github.com/craggy-io/foundation-kit/adapters/sqlite"
 )
 
 // ErrConflict is a stale-revision or lost-race transition.
@@ -231,11 +230,10 @@ type Store struct {
 
 // Open opens (creating) the state database at path.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
+	db, err := sqlite.Open(context.Background(), path, sqlite.Options{ForeignKeys: true})
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
 	s := &Store{db: db}
 	s.healthy.Store(true)
 	if _, err := db.Exec(schema); err != nil {

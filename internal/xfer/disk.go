@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/craggy-io/environment-services/envspec"
+	"github.com/craggy-io/foundation-kit/fsx"
 )
 
 // --- DirSource / DirSink (local folder; tests and core's own use) ---
@@ -138,29 +139,14 @@ func (d *dirSink) Add(path string, mode int64, r io.Reader) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(full), ".xfer-*")
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(tmp, r); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
-		return err
-	}
 	perm := os.FileMode(mode & 0o7777)
 	if perm == 0 {
 		perm = 0o644
 	}
-	_ = os.Chmod(tmp.Name(), perm)
-	if err := os.Rename(tmp.Name(), full); err != nil {
-		os.Remove(tmp.Name())
+	return fsx.Write(full, perm, func(w io.Writer) error {
+		_, err := io.Copy(w, r)
 		return err
-	}
-	return nil
+	})
 }
 
 func (d *dirSink) Concurrent() bool { return true }

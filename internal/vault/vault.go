@@ -13,9 +13,8 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
-
 	"github.com/craggy-io/environment-services/envspec"
+	"github.com/craggy-io/foundation-kit/adapters/sqlite"
 )
 
 // Secret wraps a credential value. All formatting prints "[redacted]". It
@@ -150,11 +149,10 @@ CREATE TABLE IF NOT EXISTS sticky (
 
 // Open opens (or creates) vault.db at path.
 func Open(path string, opts ...VaultOption) (*Vault, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	db, err := sqlite.Open(context.Background(), path, sqlite.Options{})
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err

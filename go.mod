@@ -5,7 +5,8 @@ go 1.27.0
 require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/craggy-io/capability-services v0.1.1-0.20261105222055-8de536911c24
-	github.com/craggy-io/foundation-kit v0.0.0-20261105211159-3c3442a425f9
+	github.com/craggy-io/foundation-kit v0.0.0-20261105234626-e7c70ea2ccbc
+	github.com/craggy-io/foundation-kit/adapters/sqlite v0.0.0-20261105234626-e7c70ea2ccbc
 	github.com/craggy-io/script-services v0.1.1-0.20261105222027-e9623d91c30d
 	github.com/google/jsonschema-go v0.4.3
 	github.com/gopacket/gopacket v1.7.4
@@ -17,7 +18,6 @@ require (
 	github.com/ulikunitz/xz v0.5.17
 	go.starlark.net v0.0.0-20261021141710-4f4267fb140d
 	golang.org/x/sys v0.49.0
-	modernc.org/sqlite v1.61.0
 )
 
 require (
@@ -54,4 +54,5 @@ require (
 	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
+	modernc.org/sqlite v1.61.0 // indirect
 )
