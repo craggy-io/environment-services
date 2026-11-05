@@ -58,7 +58,7 @@ Read top to bottom: each layer imports only the layers below it (enforced by
 | `environments` | The one assembly root: `Open` + `Manager`, `Observation`, `AndroidDevice`, envcap adapter. | envspec, envcap, internal/* | [environments](docs/environments.md) |
 | `envtest` | Test-only fakes (`FakeObservation`, `FakeServiceProvider`). Never for production. | envspec, environments | [signals](docs/signals.md#in-tests) |
 | `examples/demo` | Assembly smoke test: provision → push/exec/pull → capabilities → drain. | envspec, environments, envcap | — |
-| `internal/core` + `internal/store` | Durable lifecycle, leases, admission, operations, activities. | envspec, adapter, hostmon, signalcore, vault, xfer | [design](docs/design.md) |
+| `internal/core` + `internal/store` | Durable lifecycle, leases, admission, operations, activities; profile loading through foundation-kit `bundle`. | envspec, adapter, hostmon, signalcore, vault, xfer | [design](docs/design.md) |
 | `internal/adapters/{docker,hostenv,androidemu,androidphys}` | Runtime mechanisms and their owned collectors. | envspec, adapter, signalcore (+ own tech) | — |
 | `internal/androiddev` + `internal/adb` | Device-over-serial surface, Frida, component supervisor; the adb transport. | envspec, adapter, signalcore | — |
 | `internal/signalcore` | Hub, recorder, ranges, selector/filter matching. | envspec | [signals](docs/signals.md) |
@@ -88,6 +88,12 @@ defer mgr.Close(ctx, environments.ShutdownDisconnect)
 // mgr.Drivers()       → hostenv always; docker/android by presence and config
 // mgr.ProfileStatus("host-tools").Ready → true
 ```
+
+To add or replace profiles, make `<Dir>/profiles` a bundle: a
+[foundation-kit bundle](https://github.com/craggy-io/foundation-kit/blob/main/bundle/README.md)
+folder with a `bundle.yaml` and one JSON profile per file (see
+[Profiles](docs/environments.md#profiles)). A non-empty folder without a
+`bundle.yaml` is an error at Open.
 
 Then provision, work, release:
 

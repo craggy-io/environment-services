@@ -55,11 +55,11 @@ type Config struct {
 	Dir       string
 	ManagerID string // random when empty
 	Adapters  []adapter.Adapter
-	Host      *hostmon.Monitor // optional; nil disables measured admission
-	Vault     *vault.Vault     // optional; specs with Creds fail without it
-	Redactor  *vault.Redactor  // optional; refreshed when cred leases change
-	Signals   *signalcore.Hub  // optional; nil disables collector activities
-	Profiles  []envspec.Profile
+	Host      *hostmon.Monitor  // optional; nil disables measured admission
+	Vault     *vault.Vault      // optional; specs with Creds fail without it
+	Redactor  *vault.Redactor   // optional; refreshed when cred leases change
+	Signals   *signalcore.Hub   // optional; nil disables collector activities
+	Profiles  []envspec.Profile // beside stock and <Dir>/profiles; a duplicate name is an error
 	Quotas    []Quota
 	Clock     Clock
 	// MutationPolicy gates autonomous repair/reap; nil allows all.
@@ -162,7 +162,7 @@ func Open(ctx context.Context, c Config) (*Manager, error) {
 	if c.Dir == "" {
 		return nil, Invalidf("Config.Dir is required")
 	}
-	for _, d := range []string{"", "profiles", "signals", "tmp", "host/instances", "android/instances"} {
+	for _, d := range []string{"", "signals", "tmp", "host/instances", "android/instances"} {
 		if err := os.MkdirAll(filepath.Join(c.Dir, d), 0o755); err != nil {
 			return nil, err
 		}
@@ -233,14 +233,11 @@ func Open(ctx context.Context, c Config) (*Manager, error) {
 	}
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 
-	all := StockProfiles()
-	if fileProfiles, err := loadFileProfiles(c.Dir); err != nil {
+	all, err := loadProfiles(ctx, c.Dir, c.Profiles)
+	if err != nil {
 		m.shutdown()
 		return nil, err
-	} else {
-		all = append(all, fileProfiles...)
 	}
-	all = append(all, c.Profiles...)
 	if err := m.RegisterProfiles(all...); err != nil {
 		m.shutdown()
 		return nil, err

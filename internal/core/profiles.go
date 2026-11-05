@@ -6,13 +6,10 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -333,28 +330,6 @@ func mergeSpec(p envspec.Profile, s envspec.Spec) (envspec.Spec, error) {
 		for k, v := range p.Params {
 			out.Params[k] = v
 		}
-	}
-	return out, nil
-}
-
-// loadFileProfiles reads profiles/*.json from the manager directory.
-func loadFileProfiles(dir string) ([]envspec.Profile, error) {
-	matches, _ := filepath.Glob(filepath.Join(dir, "profiles", "*.json"))
-	var out []envspec.Profile
-	for _, m := range matches {
-		b, err := os.ReadFile(m)
-		if err != nil {
-			return nil, err
-		}
-		var list []envspec.Profile
-		if err := json.Unmarshal(b, &list); err != nil {
-			var one envspec.Profile
-			if err2 := json.Unmarshal(b, &one); err2 != nil {
-				return nil, fmt.Errorf("core: profile file %s: %w", m, err)
-			}
-			list = []envspec.Profile{one}
-		}
-		out = append(out, list...)
 	}
 	return out, nil
 }

@@ -67,7 +67,8 @@ func (m *Manager) List(f Filter) []envspec.Info {
 	return m.core.List(core.Filter{Owner: f.Owner, Session: f.Session, Kind: f.Kind, State: f.State, Live: f.Live})
 }
 
-// Profiles lists registered profiles (stock, file and Config).
+// Profiles lists registered profiles (stock, the <Dir>/profiles bundle
+// and Config).
 func (m *Manager) Profiles() []envspec.Profile { return m.core.Profiles() }
 
 // Profile returns one registered profile.
@@ -175,7 +176,8 @@ func (m *Manager) Drivers() []Driver {
 }
 
 // StockProfiles returns the built-in profiles every Manager starts
-// with, before file and Config profiles.
+// with. Profiles in the <Dir>/profiles bundle replace stock profiles of
+// the same name.
 func (m *Manager) StockProfiles() []envspec.Profile { return core.StockProfiles() }
 
 // BuildDigest returns the content digest naming a profile's built

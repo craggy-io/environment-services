@@ -31,7 +31,54 @@ this manager's across restarts — it is the value of the `craggy.manager`
 ownership label; empty mints a fresh ID per Open. `MutationPolicy` gates
 autonomous repair/reap (nil allows all); `Profiles` adds to the stock set
 (`host-tools`, `linux-tools`, `android`, `android-play`,
-`android-play-rooted`); `HostSampler` overrides host sampling in tests.
+`android-play-rooted`) and the user profiles (see [Profiles](#profiles));
+`HostSampler` overrides host sampling in tests.
+
+## Profiles
+
+Open loads profiles once, through one foundation-kit `bundle.Load`, from
+three owners:
+
+| Owner | What it is |
+| --- | --- |
+| `craggy.environments.stock` | The built-in profiles (`StockProfiles`), a Go provider. |
+| `craggy.environments.user` | The bundle at `<Dir>/profiles`, if that folder exists. |
+| `craggy.environments.config` | `Config.Profiles`, a Go provider. |
+
+The user bundle overrides the stock provider: a user profile with a stock
+name replaces it, and new names are added. `Config.Profiles` overrides
+nothing, so a name that stock or the user bundle already defines is an
+Open error (`bundle.id_conflict`). Order never picks a winner.
+
+`<Dir>/profiles` must be a bundle. Open doesn't create the folder; if it
+is missing or empty there are no user profiles, and if it holds files but no
+`bundle.yaml` Open fails (`bundle.manifest_missing`). The manifest's
+`metadata.id` must be `craggy.environments.user`, and each profile is one
+contribution of kind `environments.profile@1` whose file holds **one**
+JSON `envspec.Profile` (not a list). Its `name` must equal the
+contribution `id`. Unknown fields are errors, and each file is checked as
+`RegisterProfiles` would check it:
+
+```yaml
+# <Dir>/profiles/bundle.yaml
+apiVersion: craggy.io/bundle/v1
+metadata:
+  id: craggy.environments.user
+  version: 0.1.0
+contributions:
+  - id: busybox
+    kind: environments.profile@1
+    path: busybox.json
+```
+
+```json
+{"name": "busybox", "kind": "container", "image": "busybox:latest", "allow_images": ["busybox:*"]}
+```
+
+Profile names are bundle IDs, so they use letters, digits, `.`, `_` and
+`-`, and start and end with a letter or digit. Profiles are read only at
+Open; edit the bundle and reopen the manager to pick up changes.
+`RegisterProfiles` still registers profiles at run time from Go.
 
 ## Provision, use, release
 

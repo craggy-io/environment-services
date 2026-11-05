@@ -21,6 +21,7 @@ projections, shims or deprecation.
 | Expose environments as registry capabilities | `envcap` (handlers over envcap-owned interfaces) |
 | Fake observation in a consumer's tests | `envtest` (`FakeObservation`) — tests only |
 | Durable lifecycle, leases, admission, operations | `internal/core` + `internal/store` |
+| Profile loading (`environments.profile@1`, stock provider, `<Dir>/profiles` bundle) | `internal/core/profilekind.go` on foundation-kit `bundle` |
 | A runtime (docker, host, android emulator/physical) | `internal/adapters/*` behind `internal/adapter` |
 | Signal hub, recorder, ranges | `internal/signalcore` (each adapter owns its collectors) |
 | Starlark signal rules | `internal/rules` on script-services |
@@ -55,6 +56,12 @@ Dependencies point one way and are enforced by `arch_test.go`
   envcap's `Deps` interfaces structurally.
 - `capability-services` only in `envcap` (+ `examples/demo`).
   `script-services` and `go.starlark.net` only in `internal/rules`.
+- Profiles load only through foundation-kit `bundle.Load` in
+  `internal/core` (`loadProfiles`). Never add a second reader of profile
+  files. `<Dir>/profiles` must be a bundle with a written `bundle.yaml`
+  (`metadata.id: craggy.environments.user`, one JSON profile per file);
+  never generate a manifest, and a folder without one is an error. See
+  [docs/environments.md](docs/environments.md#profiles).
 - **No artifact-services import anywhere.** The artifact Stage/Keep port is
   owned by `envcap`; consumers implement it over their artifact stack.
 - `environments` is the only assembly root. `examples/demo` imports only

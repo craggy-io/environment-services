@@ -61,8 +61,9 @@ type Config struct {
 	// HostSampler overrides host sampling (tests); nil samples the
 	// real host once per second.
 	HostSampler func() (envspec.HostSnapshot, error)
-	// Profiles are registered in addition to the stock profiles and
-	// any profile files under Dir.
+	// Profiles are registered in addition to the stock profiles and the
+	// user profiles bundle at <Dir>/profiles. They don't override either:
+	// a Profiles name that is already defined is an Open error.
 	Profiles []envspec.Profile
 	// HostPaths are extra disk-free watch paths for the host sampler
 	// (Dir is always watched).
