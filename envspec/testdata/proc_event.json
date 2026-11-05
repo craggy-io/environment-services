@@ -1,0 +1,6 @@
+{
+  "event": "start",
+  "pid": 123,
+  "name": "com.example.app",
+  "package": "com.example.app"
+}

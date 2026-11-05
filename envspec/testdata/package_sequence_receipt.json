@@ -1,0 +1,24 @@
+{
+  "startedAt": "2026-01-02T03:04:05Z",
+  "completedAt": "2026-01-02T03:04:07Z",
+  "steps": [
+    {
+      "index": 0,
+      "operation": "install",
+      "package": "com.example.app",
+      "startedAt": "2026-01-02T03:04:05Z",
+      "completedAt": "2026-01-02T03:04:06Z",
+      "before": {
+        "package": "com.example.app",
+        "installed": false
+      },
+      "after": {
+        "package": "com.example.app",
+        "installed": true,
+        "uid": 10123,
+        "codePath": "/data/app/base.apk",
+        "codeSha256": "ab"
+      }
+    }
+  ]
+}

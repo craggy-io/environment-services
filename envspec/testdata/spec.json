@@ -1,0 +1,63 @@
+{
+  "kind": "android",
+  "profile": "android",
+  "image": "img@sha256:abc",
+  "resources": {
+    "cpus": 2,
+    "memory_mb": 4096,
+    "disk_mb": 8192
+  },
+  "network": "egress",
+  "ttl": 5400000000000,
+  "creds": [
+    {
+      "cred": "cred_1",
+      "kind": "api",
+      "labels": {
+        "a": "b"
+      },
+      "deliver": "env:TOKEN",
+      "field": "token",
+      "require_sticky": true
+    }
+  ],
+  "signals": [
+    {
+      "stream": "android.state@1",
+      "params": {
+        "packages": "com.example.app"
+      }
+    }
+  ],
+  "labels": {
+    "lab": "x"
+  },
+  "android": {
+    "api": 34,
+    "image": "google_apis",
+    "root": "magisk",
+    "frida": {
+      "version": "16.0.0",
+      "port": 27042,
+      "name": "svc"
+    },
+    "proxy_ca": true,
+    "repair": {
+      "may_reboot": true,
+      "max_attempts": 2
+    },
+    "abi": "arm64-v8a"
+  },
+  "host": {
+    "path": [
+      "/opt/bin"
+    ],
+    "env": {
+      "K": "V"
+    }
+  },
+  "params": {
+    "p": "q"
+  },
+  "key": "req-1"
+}

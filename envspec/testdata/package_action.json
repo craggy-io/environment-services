@@ -1,0 +1,7 @@
+{
+  "package": "com.example.app",
+  "activity": ".ActionActivity",
+  "command": {
+    "op": "ping"
+  }
+}

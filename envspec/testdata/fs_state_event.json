@@ -1,0 +1,14 @@
+{
+  "kind": "snapshot",
+  "root": "/data/app",
+  "bootId": "boot-1",
+  "error": "e",
+  "format": "f",
+  "command": "ls",
+  "sha256": "aa",
+  "bytes": "Ynl0ZXM=",
+  "truncated": true,
+  "baseline": true,
+  "readError": "re",
+  "since": "2026-01-02T03:04:05Z"
+}

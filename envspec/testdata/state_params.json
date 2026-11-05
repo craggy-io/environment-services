@@ -1,0 +1,10 @@
+{
+  "packages": [
+    "com.example.app"
+  ],
+  "parts": [
+    "package",
+    "storage"
+  ],
+  "interval_seconds": 10
+}

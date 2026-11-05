@@ -1,0 +1,21 @@
+{
+  "kind": "snapshot",
+  "part": "mapping",
+  "package": "com.example.app",
+  "bootId": "boot-1",
+  "error": "e",
+  "pid": 555,
+  "start": "123456",
+  "address": 481036337152,
+  "end": 481036341248,
+  "perms": "rw-p",
+  "offset": 4096,
+  "path": "[heap]",
+  "sha256": "ff",
+  "bytes": "bWVt",
+  "truncated": true,
+  "baseline": true,
+  "readError": "re",
+  "since": "2026-01-02T03:04:05Z",
+  "omittedMappings": 3
+}

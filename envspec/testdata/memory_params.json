@@ -1,0 +1,6 @@
+{
+  "package": "com.example.app",
+  "interval_seconds": 7,
+  "max_mapping_bytes": 262144,
+  "max_total_bytes": 2097152
+}

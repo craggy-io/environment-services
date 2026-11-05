@@ -1,0 +1,8 @@
+{
+  "qname": "example.com",
+  "qtype": "A",
+  "answers": [
+    "93.184.216.34"
+  ],
+  "server": "8.8.8.8"
+}

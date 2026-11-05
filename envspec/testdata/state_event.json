@@ -1,0 +1,19 @@
+{
+  "kind": "snapshot",
+  "part": "package",
+  "package": "com.example.app",
+  "bootId": "boot-1",
+  "error": "e",
+  "format": "dumpsys-package",
+  "command": "dumpsys package",
+  "sha256": "dd",
+  "bytes": "c3RhdGU=",
+  "truncated": true,
+  "baseline": true,
+  "readError": "re",
+  "since": "2026-01-02T03:04:05Z",
+  "uid": 10123,
+  "codePath": "/data/app/base.apk",
+  "codeSha256": "ee",
+  "codeError": "ce"
+}

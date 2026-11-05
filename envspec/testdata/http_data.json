@@ -1,0 +1,11 @@
+{
+  "method": "GET",
+  "host": "example.com",
+  "path": "/x",
+  "status": 200,
+  "server": "10.0.0.2",
+  "headers": {
+    "host": "example.com"
+  },
+  "dir": "request"
+}

@@ -1,0 +1,6 @@
+{
+  "id": "agent:triage-7",
+  "session": "s1",
+  "parent": "user:phil",
+  "job": "job_1"
+}

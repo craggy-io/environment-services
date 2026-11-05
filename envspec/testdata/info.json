@@ -1,0 +1,47 @@
+{
+  "id": "env_1",
+  "kind": "android",
+  "profile": "android",
+  "state": "ready",
+  "owner": {
+    "id": "agent:triage-7",
+    "session": "s1",
+    "job": "job_1"
+  },
+  "spec": {
+    "kind": "android",
+    "profile": "android",
+    "resources": {}
+  },
+  "created": "2026-01-02T03:04:05Z",
+  "image": "img",
+  "workspace": "/work",
+  "endpoints": {
+    "adb": "emulator-5554"
+  },
+  "lease": "lease_1",
+  "ttl_left": 3600000000000,
+  "borrows": [
+    "job_2"
+  ],
+  "components": [
+    {
+      "name": "frida",
+      "state": "ok",
+      "since": "2026-01-02T03:04:05Z",
+      "repairs": 0
+    }
+  ],
+  "warm": true,
+  "services": [
+    {
+      "id": "svc_1",
+      "generation": "gen_1",
+      "environment": "env_1",
+      "name": "ghidra",
+      "version": "11",
+      "state": "ready",
+      "borrowers": 0
+    }
+  ]
+}

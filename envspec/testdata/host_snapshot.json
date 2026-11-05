@@ -1,0 +1,22 @@
+{
+  "time": "2026-01-02T03:04:05Z",
+  "cpus": 16,
+  "cpu_percent": 33.5,
+  "mem_total_mb": 32768,
+  "mem_free_mb": 16384,
+  "mem_used_pct": 50,
+  "disk_free_mb": {
+    "C:": 100000
+  },
+  "emulators": [
+    {
+      "pid": 4242,
+      "name": "qemu",
+      "cpu_percent": 12,
+      "rss_mb": 2048
+    }
+  ],
+  "docker_mem_total_mb": 8192,
+  "docker_cpus": 4,
+  "pressure": true
+}

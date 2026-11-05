@@ -1,0 +1,12 @@
+{
+  "kind": "activity",
+  "callerUid": 10123,
+  "component": "com.example.app/.Main",
+  "action": "android.intent.action.VIEW",
+  "data": "content://x/1",
+  "type": "text/plain",
+  "flags": "0x1",
+  "grantRead": true,
+  "grantWrite": true,
+  "raw": "raw line"
+}

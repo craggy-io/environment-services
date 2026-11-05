@@ -1,0 +1,12 @@
+{
+  "seq": 9,
+  "kind": "env.ready",
+  "env": "env_1",
+  "job": "job_1",
+  "session": "s1",
+  "owner": "agent:triage-7",
+  "time": "2026-01-02T03:04:05Z",
+  "data": {
+    "reason": "x"
+  }
+}

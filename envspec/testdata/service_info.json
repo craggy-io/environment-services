@@ -1,0 +1,11 @@
+{
+  "id": "svc_1",
+  "generation": "gen_1",
+  "environment": "env_1",
+  "name": "ghidra",
+  "version": "11",
+  "state": "ready",
+  "borrowers": 2,
+  "image": "img",
+  "failure": "boom"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "daemon",
+  "proc": "proc_1",
+  "stream": "stdout",
+  "text": "chunk"
+}

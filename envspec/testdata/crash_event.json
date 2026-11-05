@@ -1,0 +1,23 @@
+{
+  "kind": "tombstone",
+  "process": "com.example.app",
+  "pid": 99,
+  "signal": "SIGSEGV",
+  "text": "fatal",
+  "bootId": "boot-1",
+  "error": "e",
+  "tombstone": {
+    "path": "/data/tombstones/tombstone_03",
+    "size": 1234,
+    "mtime": 1767225600,
+    "sha256": "bb",
+    "bytes": "dG9tYg==",
+    "truncated": true,
+    "preexisting": true,
+    "readError": "re",
+    "package": "com.example.app",
+    "packageCodePath": "/data/app/base.apk",
+    "packageCodeSha256": "cc",
+    "packageCodeError": "pce"
+  }
+}

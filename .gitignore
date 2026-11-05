@@ -1,0 +1,19 @@
+# Binaries and build output
+*.exe
+*.dll
+*.so
+*.dylib
+bin/
+
+# Test and coverage output
+*.test
+*.out
+coverage.out
+
+# Local state and scratch
+*.db
+*.db-wal
+*.db-shm
+
+freeze/
+

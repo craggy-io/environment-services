@@ -1,0 +1,7 @@
+{
+  "name": "frida",
+  "state": "ok",
+  "since": "2026-01-02T03:04:05Z",
+  "repairs": 2,
+  "last_failure": "boom"
+}

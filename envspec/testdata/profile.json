@@ -1,0 +1,50 @@
+{
+  "name": "android",
+  "kind": "android",
+  "description": "desc",
+  "image": "img",
+  "build": {
+    "dockerfile": "Dockerfile.x",
+    "args": {
+      "A": "B"
+    }
+  },
+  "resources": {
+    "cpus": 1,
+    "memory_mb": 1024,
+    "disk_mb": 2048
+  },
+  "max_resources": {
+    "cpus": 4,
+    "memory_mb": 8192,
+    "disk_mb": 16384
+  },
+  "allow_images": [
+    "alpine:*"
+  ],
+  "network": "isolated",
+  "allow_networks": [
+    "none",
+    "egress"
+  ],
+  "ttl": 3600000000000,
+  "max_ttl": 14400000000000,
+  "warm": 1,
+  "prepare": true,
+  "reuse": true,
+  "android": {
+    "api": 33,
+    "repair": {}
+  },
+  "host": {
+    "path": [
+      "/bin"
+    ]
+  },
+  "labels": {
+    "l": "v"
+  },
+  "params": {
+    "x": "y"
+  }
+}

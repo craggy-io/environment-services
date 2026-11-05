@@ -1,0 +1,18 @@
+{
+  "package": "com.example.app",
+  "process": "com.example.app",
+  "kind": "checkpoint",
+  "pid": 777,
+  "scriptSha256": "s1",
+  "runtimeVersion": "16.0.0",
+  "bridgeSha256": "b1",
+  "data": "ZGF0YQ==",
+  "error": "e",
+  "level": "info",
+  "payload": {
+    "ok": true
+  },
+  "log": "log",
+  "requestedAt": "2026-01-02T03:04:05Z",
+  "completedAt": "2026-01-02T03:04:06Z"
+}

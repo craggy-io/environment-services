@@ -1,0 +1,20 @@
+{
+  "collectors": [
+    "col_1"
+  ],
+  "id": "cap_1",
+  "streams": [
+    "android.crash@2"
+  ],
+  "sources": [
+    "env_1"
+  ],
+  "from": "2026-01-02T03:04:05Z",
+  "to": "2026-01-02T03:04:05Z",
+  "quality": {
+    "received": 5,
+    "dropped": 0,
+    "seq_gaps": 0,
+    "restarts": 0
+  }
+}

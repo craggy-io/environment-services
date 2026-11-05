@@ -1,0 +1,9 @@
+{
+  "collectors": [
+    "col_1"
+  ],
+  "running": true,
+  "since": "2026-01-02T03:04:05Z",
+  "last_failure": "boom",
+  "failed_at": "2026-01-02T03:04:05Z"
+}

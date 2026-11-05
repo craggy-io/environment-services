@@ -1,0 +1,8 @@
+{
+  "checkpoint_interval_ms": 500,
+  "package": "com.example.app",
+  "port": 27042,
+  "process": "system_server",
+  "script": "send(1)",
+  "spawn": true
+}

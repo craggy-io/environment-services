@@ -1,0 +1,21 @@
+{
+  "op": "provision",
+  "stage": "pull-image",
+  "done": 5,
+  "total": 10,
+  "unit": "bytes",
+  "message": "m",
+  "env_id": "env_1",
+  "proc_id": "proc_1",
+  "stdout_bytes": 3,
+  "stderr_bytes": 4,
+  "queue_position": 1,
+  "requested_cpus": 2,
+  "requested_memory_mb": 512,
+  "available_cpus": 6,
+  "available_memory_mb": 777,
+  "capacity_cpus": 8,
+  "capacity_memory_mb": 888,
+  "reserved_cpus": 2,
+  "reserved_memory_mb": 111
+}

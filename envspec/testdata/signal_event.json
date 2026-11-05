@@ -1,0 +1,12 @@
+{
+  "stream": "android.crash@2",
+  "source": "env_1",
+  "collector": "col_1",
+  "seq": 42,
+  "time": "2026-01-02T03:04:05Z",
+  "data": {
+    "kind": "crash"
+  },
+  "depth": 2,
+  "code_ref": "rule-1"
+}

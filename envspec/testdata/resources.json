@@ -1,0 +1,9 @@
+{
+  "cpu_percent": 12.5,
+  "mem_mb": 340.25,
+  "mem_limit_mb": 1024,
+  "net_rx_kb": 10,
+  "net_tx_kb": 20,
+  "procs": 7,
+  "top": "top"
+}

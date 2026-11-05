@@ -1,0 +1,23 @@
+{
+  "collectors": [
+    "col_1"
+  ],
+  "streams": [
+    "android.*"
+  ],
+  "sources": [
+    "env_1"
+  ],
+  "where": [
+    {
+      "field": "tag",
+      "op": "eq",
+      "value": "x"
+    }
+  ],
+  "params": {
+    "roots": [
+      "/data"
+    ]
+  }
+}

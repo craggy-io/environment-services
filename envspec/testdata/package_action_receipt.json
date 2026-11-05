@@ -1,0 +1,20 @@
+{
+  "package": "com.example.app",
+  "activity": ".ActionActivity",
+  "startedAt": "2026-01-02T03:04:05Z",
+  "completedAt": "2026-01-02T03:04:06Z",
+  "before": {
+    "package": "com.example.app",
+    "installed": true,
+    "uid": 10123
+  },
+  "after": {
+    "package": "com.example.app",
+    "installed": true,
+    "uid": 10123
+  },
+  "result": {
+    "ok": true
+  },
+  "resultSha256": "cd"
+}

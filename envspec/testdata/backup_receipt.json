@@ -1,0 +1,26 @@
+{
+  "package": "com.example.app",
+  "transport": "com.android.localtransport/LocalTransport",
+  "previousTransport": "t0",
+  "backupEnabled": true,
+  "enabledByHost": true,
+  "recipient": "r",
+  "startedAt": "2026-01-02T03:04:05Z",
+  "completedAt": "2026-01-02T03:04:09Z",
+  "commandOutput": "Success",
+  "objects": [
+    {
+      "path": "/data/backup/o",
+      "sha256": "ef",
+      "bytes": "b2Jq",
+      "entries": [
+        {
+          "name": "apps/com.example.app/f",
+          "size": 3,
+          "sha256": "gh",
+          "bytes": "ZW50"
+        }
+      ]
+    }
+  ]
+}

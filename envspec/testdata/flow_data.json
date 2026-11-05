@@ -1,0 +1,10 @@
+{
+  "src": "10.0.0.1",
+  "dst": "10.0.0.2",
+  "proto": "udp",
+  "sport": 53,
+  "dport": 5353,
+  "direction": "out",
+  "bytes": 1000,
+  "packets": 9
+}

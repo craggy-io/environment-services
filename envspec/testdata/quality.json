@@ -1,0 +1,19 @@
+{
+  "received": 100,
+  "dropped": 3,
+  "seq_gaps": 1,
+  "restarts": 2,
+  "clock_skew": 1500000000,
+  "contains_secret": true,
+  "gaps": [
+    {
+      "collector": "col_1",
+      "dropped": 3,
+      "from_seq": 10,
+      "to_seq": 12,
+      "from": "2026-01-02T03:04:05Z",
+      "to": "2026-01-02T03:04:05Z",
+      "reason": "seq-gap"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "roots": [
+    "/data/app"
+  ],
+  "interval_seconds": 5
+}

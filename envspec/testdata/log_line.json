@@ -1,0 +1,8 @@
+{
+  "text": "hello",
+  "stream": "stdout",
+  "tag": "Tag",
+  "priority": "INFO",
+  "pid": 42,
+  "tid": 43
+}
