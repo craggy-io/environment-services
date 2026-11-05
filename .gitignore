@@ -15,5 +15,3 @@ coverage.out
 *.db-wal
 *.db-shm
 
-freeze/
-
