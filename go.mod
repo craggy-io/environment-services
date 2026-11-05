@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/craggy-io/capability-services v0.1.0
+	github.com/craggy-io/foundation-kit v0.0.0-20261105161744-a4c555eecf83
 	github.com/craggy-io/script-services v0.1.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/gopacket/gopacket v1.7.4
