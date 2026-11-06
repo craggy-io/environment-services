@@ -101,6 +101,12 @@ func TestLayering(t *testing.T) {
 				Except: []string{"./internal/adapters/docker"},
 				Forbid: []string{"github.com/moby/moby/...", "github.com/gopacket/gopacket/..."},
 			},
+			{
+				Name:   "never import the craggy-labs application",
+				Why:    "no library imports the application that wires it; craggy-labs is a private consumer of this module (craggy-labs plan §4.5)",
+				From:   []string{"./..."},
+				Forbid: []string{"github.com/craggy-io/craggy-labs/..."},
+			},
 		},
 	})
 }
