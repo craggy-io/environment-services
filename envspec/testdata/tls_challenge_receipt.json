@@ -1,0 +1,16 @@
+{
+  "url": "https://10.0.2.2:40123/",
+  "expectedHost": "api.example.com",
+  "failure": "untrusted-chain",
+  "certificateSha256": "ab",
+  "certificateDer": "ZGVy",
+  "startedAt": "2026-01-02T03:04:05Z",
+  "sessions": [
+    {
+      "at": "2026-01-02T03:04:06Z",
+      "remoteAddr": "127.0.0.1:50000",
+      "version": 772,
+      "cipherSuite": 4865
+    }
+  ]
+}

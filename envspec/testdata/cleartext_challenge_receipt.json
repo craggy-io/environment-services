@@ -1,0 +1,14 @@
+{
+  "url": "http://10.0.2.2:40124/craggy/cleartext/0123",
+  "pathSha256": "cd",
+  "startedAt": "2026-01-02T03:04:05Z",
+  "requests": [
+    {
+      "at": "2026-01-02T03:04:06Z",
+      "remoteAddr": "127.0.0.1:50001",
+      "method": "GET",
+      "pathSha256": "cd",
+      "matched": true
+    }
+  ]
+}

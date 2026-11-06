@@ -111,3 +111,74 @@ type BackupReceipt struct {
 // system-server PendingIntent lifecycle observer (the observer script
 // itself is consumer-owned).
 const PendingIntentProtocol = "android-pendingintent@1"
+
+// ChallengeHostAlias is the address the standard Android emulator routes
+// to the host's loopback interface. Challenge servers advertise it by
+// default; physical devices or other bridges need an explicit
+// AdvertiseHost.
+const ChallengeHostAlias = "10.0.2.2"
+
+// TLSFailureUntrustedChain is the single validation failure a TLS
+// challenge presents: the leaf name matches the expected host, but its
+// issuing CA is ephemeral and outside every trust store.
+const TLSFailureUntrustedChain = "untrusted-chain"
+
+// TLSChallengeOptions configure a host-owned TLS peer for a device.
+// ExpectedHost is the name (DNS or IP) the leaf certificate is issued for
+// and defaults to the advertise host. AdvertiseHost is the host the
+// device dials and defaults to ChallengeHostAlias. Response is the body
+// returned to a client that completes the handshake.
+type TLSChallengeOptions struct {
+	ExpectedHost  string
+	AdvertiseHost string
+	Response      []byte
+}
+
+// TLSSession is one server-observed completed TLS connection.
+type TLSSession struct {
+	At          string `json:"at"`
+	RemoteAddr  string `json:"remoteAddr"`
+	Version     uint16 `json:"version"`
+	CipherSuite uint16 `json:"cipherSuite"`
+}
+
+// TLSChallengeReceipt fixes the challenge's presented certificate and
+// validation failure independently of the app result; Sessions are the
+// connections that completed a handshake against it (a client that
+// correctly rejects the chain completes none).
+type TLSChallengeReceipt struct {
+	URL               string       `json:"url"`
+	ExpectedHost      string       `json:"expectedHost"`
+	Failure           string       `json:"failure"`
+	CertificateSHA256 string       `json:"certificateSha256"`
+	CertificateDER    []byte       `json:"certificateDer"`
+	StartedAt         string       `json:"startedAt"`
+	Sessions          []TLSSession `json:"sessions"`
+}
+
+// CleartextChallengeOptions configure a host-owned HTTP peer for a
+// device. AdvertiseHost defaults to ChallengeHostAlias.
+type CleartextChallengeOptions struct {
+	AdvertiseHost string
+	Response      []byte
+}
+
+// CleartextRequest is one server-observed HTTP request. The raw challenge
+// path is deliberately omitted: only its digest and whether it matched
+// are retained.
+type CleartextRequest struct {
+	At         string `json:"at"`
+	RemoteAddr string `json:"remoteAddr"`
+	Method     string `json:"method"`
+	PathSHA256 string `json:"pathSha256"`
+	Matched    bool   `json:"matched"`
+}
+
+// CleartextChallengeReceipt records an HTTP-only endpoint carrying an
+// unguessable path and every request it observed.
+type CleartextChallengeReceipt struct {
+	URL        string             `json:"url"`
+	PathSHA256 string             `json:"pathSha256"`
+	StartedAt  string             `json:"startedAt"`
+	Requests   []CleartextRequest `json:"requests"`
+}

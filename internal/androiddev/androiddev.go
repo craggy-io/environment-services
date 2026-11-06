@@ -127,8 +127,9 @@ type Device struct {
 
 	mu         sync.Mutex
 	pkgStarts  map[string]time.Time
-	forwards   []int // local ports this device forwarded (owned)
-	fridaOwned bool  // this device (re)started frida-server
+	forwards   []int                  // local ports this device forwarded (owned)
+	fridaOwned bool                   // this device (re)started frida-server
+	challenges map[io.Closer]struct{} // live challenge servers (owned)
 }
 
 // New builds a Device and its component supervisor. Components are
@@ -302,18 +303,18 @@ func (d *Device) packageStarts() map[string]time.Time {
 	return out
 }
 
-// DetachCleanup removes only what this device attached: the adb
-// forwards it created and a frida-server it (re)started. Physical
-// detach and emulator disconnect use it; nothing else on the device
-// is touched.
+// DetachCleanup removes only what this device attached: its challenge
+// servers, the adb forwards it created and a frida-server it
+// (re)started. Physical detach and emulator disconnect use it;
+// nothing else on the device is touched.
 func (d *Device) DetachCleanup(ctx context.Context) error {
+	firstErr := d.CloseChallenges()
 	d.mu.Lock()
 	fwds := append([]int(nil), d.forwards...)
 	d.forwards = nil
 	owned := d.fridaOwned
 	d.fridaOwned = false
 	d.mu.Unlock()
-	var firstErr error
 	for _, p := range fwds {
 		if _, err := d.tr.Forward(ctx, d.cfg.Serial, p, 0); err != nil && firstErr == nil {
 			firstErr = err

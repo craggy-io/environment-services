@@ -68,6 +68,8 @@ func goldenCases() map[string]func() any {
 		"package_action_receipt":          func() any { return &envspec.PackageActionReceipt{} },
 		"package_sequence_action_receipt": func() any { return &envspec.PackageSequenceActionReceipt{} },
 		"backup_receipt":                  func() any { return &envspec.BackupReceipt{} },
+		"tls_challenge_receipt":           func() any { return &envspec.TLSChallengeReceipt{} },
+		"cleartext_challenge_receipt":     func() any { return &envspec.CleartextChallengeReceipt{} },
 	}
 }
 

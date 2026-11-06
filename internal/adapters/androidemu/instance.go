@@ -94,7 +94,8 @@ func (i *Instance) Dispose(ctx context.Context, op adapter.OpContext, disp adapt
 	}
 }
 
-// destroy kills the emulator and frees the port.
+// destroy closes the device's challenge servers, kills the emulator
+// and frees the port.
 func (i *Instance) destroy(ctx context.Context) error {
 	i.mu.Lock()
 	if i.destroyed {
@@ -103,6 +104,7 @@ func (i *Instance) destroy(ctx context.Context) error {
 	}
 	i.destroyed = true
 	i.mu.Unlock()
+	_ = i.dev.CloseChallenges()
 	_, _ = i.ad.emu(ctx, i.serial, "kill")
 	if p := emulatorProcess(i.pid, i.port); p != nil {
 		killTree(p)
@@ -188,8 +190,12 @@ func parseSnapshotList(out string) []string {
 	return names
 }
 
-// Reset restores the clean snapshot (warm-pool reuse).
+// Reset closes the lease's challenge servers and restores the clean
+// snapshot (warm-pool reuse), so nothing leaks into the next lease.
 func (i *Instance) Reset(ctx context.Context, op adapter.OpContext) error {
+	if err := i.dev.CloseChallenges(); err != nil {
+		return err
+	}
 	return i.Load(ctx, op, "clean")
 }
 

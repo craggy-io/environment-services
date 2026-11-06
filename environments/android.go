@@ -41,6 +41,25 @@ type AndroidDevice interface {
 	Logcat(ctx context.Context, args string) (io.ReadCloser, func() error, error)
 	// Screenshot returns a PNG of the current display.
 	Screenshot(ctx context.Context) ([]byte, error)
+	// StartTLSChallenge starts a host-owned TLS peer presenting a leaf for
+	// opts.ExpectedHost from an untrusted ephemeral CA; completed
+	// handshakes are receipted.
+	StartTLSChallenge(ctx context.Context, opts envspec.TLSChallengeOptions) (Challenge[envspec.TLSChallengeReceipt], error)
+	// StartCleartextChallenge starts a host-owned HTTP-only peer on an
+	// unguessable path; every request is receipted by path digest.
+	StartCleartextChallenge(ctx context.Context, opts envspec.CleartextChallengeOptions) (Challenge[envspec.CleartextChallengeReceipt], error)
+}
+
+// Challenge is a host-owned network peer for the app under test. The
+// device reaches it at URL (by default through the emulator's host alias
+// envspec.ChallengeHostAlias; a physical device needs an explicit
+// AdvertiseHost). The environment's lease owns it: release, expiry,
+// reset or destroy closes it, as do Close and cancelling the ctx it was
+// started with. Receipt can still be read after it closes.
+type Challenge[R any] interface {
+	URL() string
+	Receipt() R
+	Close() error
 }
 
 // deviceInstance is implemented by Android adapter instances.
@@ -195,4 +214,28 @@ func (d *androidDevice) Screenshot(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	return dev.Screenshot(ctx)
+}
+
+func (d *androidDevice) StartTLSChallenge(ctx context.Context, opts envspec.TLSChallengeOptions) (Challenge[envspec.TLSChallengeReceipt], error) {
+	dev, err := d.device()
+	if err != nil {
+		return nil, err
+	}
+	c, err := dev.StartTLSChallenge(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (d *androidDevice) StartCleartextChallenge(ctx context.Context, opts envspec.CleartextChallengeOptions) (Challenge[envspec.CleartextChallengeReceipt], error) {
+	dev, err := d.device()
+	if err != nil {
+		return nil, err
+	}
+	c, err := dev.StartCleartextChallenge(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }

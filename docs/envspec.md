@@ -16,7 +16,7 @@ Import path: `github.com/craggy-io/environment-services/envspec`.
 | Holder surface | `Handle` (`ID`, `Info`, `Exec`, `Push`, `Pull`, `Release`), `Cmd{Argv, Env, Timeout}`, `Source`/`Sink` with `MemSource`/`NewMemSink`, `Entry`, `TransferStats`, `Progress` (+ `Throttled`) |
 | Read models | `Info` (with `Conditions []Condition`), `LifecycleEvent`, `HostSnapshot`, `HostCapacity`, `PoolCapacity`, `ProfileStatus`, `State` |
 | Signals | `SignalEvent`, `Selector`, `Filter`/`Predicate`/`Op`, `Quality`/`Gap`, `Coverage`, `RangeMeta`, `StreamState`, stream-name constants (`StreamAndroidCrash = "android.crash@2"`, …) and every stream payload type (`CrashEvent`, `StateEvent`, `FridaData`, `FlowData`, …) |
-| Android receipts | `PackageSnapshot`, `PackageMutation`/`PackageAction` (+ receipts), `BackupReceipt`, `PendingIntentProtocol` |
+| Android receipts | `PackageSnapshot`, `PackageMutation`/`PackageAction` (+ receipts), `BackupReceipt`, `TLSChallengeOptions`/`TLSChallengeReceipt`/`TLSSession`, `CleartextChallengeOptions`/`CleartextChallengeReceipt`/`CleartextRequest`, `ChallengeHostAlias`, `TLSFailureUntrustedChain`, `PendingIntentProtocol` |
 | Services | `ServiceSpec`, `ServiceRequest`, `ServiceInfo`, `ServiceProvider`, `ServiceLease` |
 | Policy + ids | `MutationPolicy` (the experiment-hold port), `NewID`/`HasPrefix`, sentinels `ErrNotFound`, `ErrInvalid`, `ErrNotReady`, `ErrConflict`, `ErrBackupRejected`, `ErrBackupRecipientEmpty` |
 

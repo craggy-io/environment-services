@@ -131,6 +131,28 @@ manager owns: `Shell`/`RootShell` (device-shell strings, unlike argv-only
 on this interface; it exists only inside the capability surface, where the
 secret never leaves the vault.
 
+`StartTLSChallenge(ctx, envspec.TLSChallengeOptions)` and
+`StartCleartextChallenge(ctx, envspec.CleartextChallengeOptions)` start a
+host-owned network peer for the app under test and return a
+`Challenge[R]` (`URL`, `Receipt`, `Close`) whose receipt is observed by the
+host, independently of what the app reports:
+
+- TLS: a leaf issued for `ExpectedHost` by an ephemeral, untrusted CA, so
+  the only validation failure is `envspec.TLSFailureUntrustedChain`.
+  `envspec.TLSChallengeReceipt` pins the leaf (`CertificateSHA256`,
+  `CertificateDER`) and lists the `Sessions` that completed a handshake — a
+  correctly validating or pinning client completes none.
+- Cleartext: HTTP on an unguessable path. `envspec.CleartextChallengeReceipt`
+  lists every request by path digest and whether it matched; the raw path
+  is never retained.
+
+The device reaches the peer at `envspec.ChallengeHostAlias` (`10.0.2.2`, the
+emulator's alias for the host loopback, where the server then listens
+loopback-only). A physical device or another bridge needs an explicit
+`AdvertiseHost`, which binds every interface. The lease owns each challenge:
+release, expiry, warm reset and destroy close it, as do `Close` and
+cancelling the start `ctx`; `Receipt` stays readable afterwards.
+
 ## Services
 
 `AcquireService(owner, ServiceRequest)` returns an `envspec.ServiceLease`
