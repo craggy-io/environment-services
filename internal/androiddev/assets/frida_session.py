@@ -70,7 +70,7 @@ def run():
             timer.daemon = True
             timer.start()
             try:
-                result = script.exports_sync.cclabcheckpoint()
+                result = script.exports_sync.craggycheckpoint()
                 completed = datetime.now(timezone.utc).isoformat()
                 if not stop.is_set():
                     emit("checkpoint", requestedAt=requested, completedAt=completed, payload=result)
