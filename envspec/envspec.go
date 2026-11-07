@@ -110,18 +110,21 @@ type SignalRequest struct {
 
 // Spec is an environment request. Fields left zero inherit from Profile.
 type Spec struct {
-	Kind      Kind              `json:"kind,omitempty"`
-	Profile   string            `json:"profile,omitempty"`
-	Image     string            `json:"image,omitempty"`
-	Resources Resources         `json:"resources,omitempty"`
-	Network   Network           `json:"network,omitempty"`
-	TTL       time.Duration     `json:"ttl,omitempty"`
-	Creds     []CredRequest     `json:"creds,omitempty"`
-	Signals   []SignalRequest   `json:"signals,omitempty"`
-	Labels    map[string]string `json:"labels,omitempty"`
-	Android   *AndroidOptions   `json:"android,omitempty"`
-	Host      *HostOptions      `json:"host,omitempty"`
-	Params    map[string]string `json:"params,omitempty"`
+	Kind    Kind   `json:"kind,omitempty"`
+	Profile string `json:"profile,omitempty"`
+	Image   string `json:"image,omitempty"`
+	// PublishedTCPPort exposes one container port on an ephemeral host loopback
+	// port. The assigned address is reported in Info.Endpoints["tcp"].
+	PublishedTCPPort uint16            `json:"published_tcp_port,omitempty"`
+	Resources        Resources         `json:"resources,omitempty"`
+	Network          Network           `json:"network,omitempty"`
+	TTL              time.Duration     `json:"ttl,omitempty"`
+	Creds            []CredRequest     `json:"creds,omitempty"`
+	Signals          []SignalRequest   `json:"signals,omitempty"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Android          *AndroidOptions   `json:"android,omitempty"`
+	Host             *HostOptions      `json:"host,omitempty"`
+	Params           map[string]string `json:"params,omitempty"`
 	// Key makes Provision idempotent: repeating a call with the same owner
 	// and key returns the existing environment.
 	Key string `json:"key,omitempty"`

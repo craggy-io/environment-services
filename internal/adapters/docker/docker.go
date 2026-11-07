@@ -131,6 +131,9 @@ func (a *Adapter) Capacity(ctx context.Context) (memMB int64, cpus int, err erro
 }
 
 func (a *Adapter) Validate(ctx context.Context, op adapter.OpContext, s envspec.Spec) error {
+	if s.PublishedTCPPort != 0 && s.Network != envspec.NetworkOpen && s.Network != envspec.NetworkEgress {
+		return fmt.Errorf("%w: published TCP port needs an open or egress container network", envspec.ErrInvalid)
+	}
 	if strings.EqualFold(s.Params["container.privileged"], "true") {
 		return fmt.Errorf("%w: privileged containers are never granted; remove container.privileged (sidecars get extra capabilities, targets never do)",
 			envspec.ErrInvalid)
@@ -212,6 +215,15 @@ func (a *Adapter) Observe(ctx context.Context, op adapter.OpContext, ref adapter
 	}
 	obs.Image = a.digestOfInspect(ctx, c.Image)
 	obs.Endpoints = map[string]string{"container": c.ID, "name": obs.Ref.Name}
+	if c.NetworkSettings != nil {
+		for _, bindings := range c.NetworkSettings.Ports {
+			for _, binding := range bindings {
+				if binding.HostIP.IsLoopback() && binding.HostPort != "" {
+					obs.Endpoints["tcp"] = binding.HostIP.String() + ":" + binding.HostPort
+				}
+			}
+		}
+	}
 	if c.State != nil {
 		obs.Detail = string(c.State.Status)
 	}

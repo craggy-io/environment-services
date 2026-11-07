@@ -607,3 +607,10 @@ func TestPushPullRoundTrip(t *testing.T) {
 		t.Fatalf("round trip: %v", sink.Files)
 	}
 }
+
+func TestPublishedTCPPortRequiresContainer(t *testing.T) {
+	p := envspec.Profile{Name: "host-test", Kind: envspec.Host, Network: envspec.NetworkOpen}
+	if _, err := mergeSpec(p, envspec.Spec{Profile: p.Name, PublishedTCPPort: 8080}); !errors.Is(err, envspec.ErrInvalid) {
+		t.Fatalf("host published port: %v, want ErrInvalid", err)
+	}
+}

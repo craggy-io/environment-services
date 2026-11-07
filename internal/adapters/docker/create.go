@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -131,14 +133,16 @@ func (a *Adapter) Create(ctx context.Context, op adapter.OpContext, s envspec.Sp
 		Name: name,
 		Config: &container.Config{
 			Image: image, User: user, Labels: a.labelsFor(id, s),
-			Cmd:        []string{"sleep", "infinity"},
-			WorkingDir: "/work",
-			Tty:        false,
+			Cmd:          []string{"sleep", "infinity"},
+			WorkingDir:   "/work",
+			Tty:          false,
+			ExposedPorts: publishedPortSet(s.PublishedTCPPort),
 		},
 		HostConfig: &container.HostConfig{
-			NetworkMode: netMode,
-			CapDrop:     []string{"ALL"},
-			SecurityOpt: []string{"no-new-privileges"},
+			NetworkMode:  netMode,
+			PortBindings: publishedPortBindings(s.PublishedTCPPort),
+			CapDrop:      []string{"ALL"},
+			SecurityOpt:  []string{"no-new-privileges"},
 			Resources: container.Resources{
 				Memory:     mem,
 				MemorySwap: mem,
@@ -175,6 +179,24 @@ func (a *Adapter) Create(ctx context.Context, op adapter.OpContext, s envspec.Sp
 		}
 	}
 	return inst, nil
+}
+
+func publishedPort(s uint16) network.Port {
+	return network.MustParsePort(strconv.Itoa(int(s)) + "/tcp")
+}
+
+func publishedPortSet(s uint16) network.PortSet {
+	if s == 0 {
+		return nil
+	}
+	return network.PortSet{publishedPort(s): {}}
+}
+
+func publishedPortBindings(s uint16) network.PortMap {
+	if s == 0 {
+		return nil
+	}
+	return network.PortMap{publishedPort(s): {{HostIP: netip.MustParseAddr("127.0.0.1")}}}
 }
 
 func (a *Adapter) startEgressSidecar(ctx context.Context, inst *Instance, netName string) error {

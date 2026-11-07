@@ -2,6 +2,8 @@ package docker_test
 
 import (
 	"context"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -114,6 +116,45 @@ func TestDockerContainerLifecycle(t *testing.T) {
 	}
 	if err := m2.Release(ctx, envID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDockerPublishedService(t *testing.T) {
+	d := liveAdapter(t)
+	m := openManager(t, t.TempDir(), d, tinyProfile())
+	defer m.Close(context.Background(), core.ShutdownDrain)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	request := envspec.ServiceRequest{Key: "published-service", Environment: envspec.Spec{
+		Profile: "tiny", Network: envspec.NetworkOpen, PublishedTCPPort: 8080}, Service: envspec.ServiceSpec{
+		Name: "fixture-http", Version: "1", Start: []string{"sh", "-c", "echo ready >/work/index.html; exec httpd -f -p 8080 -h /work"},
+		Ready: []string{"wget", "-q", "-O", "-", "http://127.0.0.1:8080/"}}}
+	lease, err := m.AcquireService(ctx, envspec.Owner{ID: "agent:test", Session: "dockertest"}, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := lease.Info().Endpoints["tcp"]
+	if !strings.HasPrefix(address, "127.0.0.1:") {
+		t.Fatalf("endpoint = %q", address)
+	}
+	res, err := http.Get("http://" + address + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil || res.StatusCode != http.StatusOK || string(body) != "ready\n" {
+		t.Fatalf("host probe: status=%d body=%q err=%v", res.StatusCode, body, err)
+	}
+	info := lease.ServiceInfo()
+	if err := lease.Release(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.StopService(ctx, info.ID, info.Generation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := http.Get("http://" + address + "/"); err == nil {
+		t.Fatal("published endpoint answered after generation stop")
 	}
 }
 

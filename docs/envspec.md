@@ -39,6 +39,10 @@ Import path: `github.com/craggy-io/environment-services/envspec`.
 - **Required signals block readiness.** `SignalRequest.Required` pins block
   the provision barrier until the collector acknowledges; the default is
   best-effort.
+- **Published container TCP port.** `Spec.PublishedTCPPort` exposes exactly
+  one target port on an ephemeral host loopback port. The assigned address is
+  `Info.Endpoints["tcp"]`. Docker requires an `open` or `egress` network;
+  internal and network-free containers cannot publish a reachable endpoint.
 
 See [environments](environments.md) for the manager that acts on these
 records and [signals](signals.md) for the observation model.

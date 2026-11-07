@@ -283,6 +283,44 @@ func TestValidateRejectsPrivileged(t *testing.T) {
 	}
 }
 
+func TestPublishedTCPPortIsLoopbackOnlyAndObserved(t *testing.T) {
+	a, f := newTestAdapter()
+	s := testSpec()
+	s.PublishedTCPPort = 8080
+	if err := a.Validate(context.Background(), adapter.OpContext{}, s); !errors.Is(err, envspec.ErrInvalid) {
+		t.Fatalf("network-none port validation = %v, want ErrInvalid", err)
+	}
+	s.Network = envspec.NetworkIsolated
+	if err := a.Validate(context.Background(), adapter.OpContext{}, s); !errors.Is(err, envspec.ErrInvalid) {
+		t.Fatalf("internal-network port validation = %v, want ErrInvalid", err)
+	}
+	s.Network = envspec.NetworkOpen
+	if err := a.Validate(context.Background(), adapter.OpContext{}, s); err != nil {
+		t.Fatal(err)
+	}
+	op := adapter.OpContext{EnvID: testEnvID}
+	inst, err := a.Create(context.Background(), op, s, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc, err := f.find(inst.Ref().External)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := publishedPort(8080)
+	if _, ok := fc.cfg.ExposedPorts[port]; !ok {
+		t.Fatal("container port was not exposed")
+	}
+	bindings := fc.hostCfg.PortBindings[port]
+	if len(bindings) != 1 || !bindings[0].HostIP.IsLoopback() || bindings[0].HostPort != "" {
+		t.Fatalf("port binding = %+v, want ephemeral loopback", bindings)
+	}
+	obs, err := a.Observe(context.Background(), op, inst.Ref())
+	if err != nil || obs.Endpoints["tcp"] != "127.0.0.1:49152" {
+		t.Fatalf("observed endpoints = %v, error %v", obs.Endpoints, err)
+	}
+}
+
 func TestEnsureImageBuildAndPull(t *testing.T) {
 	a, f := newTestAdapter()
 	ctx := context.Background()

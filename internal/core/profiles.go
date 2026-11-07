@@ -293,6 +293,9 @@ func mergeSpec(p envspec.Profile, s envspec.Spec) (envspec.Spec, error) {
 	if out.Network == "" {
 		out.Network = p.Network
 	}
+	if out.PublishedTCPPort != 0 && out.Kind != envspec.Container {
+		return out, Invalidf("published_tcp_port is only supported for container environments")
+	}
 	if len(p.AllowNetworks) > 0 {
 		ok := false
 		for _, n := range p.AllowNetworks {

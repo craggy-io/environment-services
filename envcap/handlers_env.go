@@ -230,29 +230,31 @@ type provisionIn struct {
 }
 
 type overridesIn struct {
-	Image      string            `json:"image,omitempty" jsonschema:"image to run instead of the profile's"`
-	Network    string            `json:"network,omitempty" jsonschema:"network policy; must be one the profile allows"`
-	CPUs       float64           `json:"cpus,omitempty"`
-	MemoryMB   int64             `json:"memory_mb,omitempty"`
-	DiskMB     int64             `json:"disk_mb,omitempty"`
-	TTLSeconds int64             `json:"ttl_seconds,omitempty" jsonschema:"holder lease TTL in seconds"`
-	Labels     map[string]string `json:"labels,omitempty"`
-	Signals    []string          `json:"signals,omitempty" jsonschema:"streams to record from boot, e.g. net.flows@1"`
+	Image            string            `json:"image,omitempty" jsonschema:"image to run instead of the profile's"`
+	Network          string            `json:"network,omitempty" jsonschema:"network policy; must be one the profile allows"`
+	PublishedTCPPort uint16            `json:"published_tcp_port,omitempty" jsonschema:"container TCP port exposed on an ephemeral host loopback port"`
+	CPUs             float64           `json:"cpus,omitempty"`
+	MemoryMB         int64             `json:"memory_mb,omitempty"`
+	DiskMB           int64             `json:"disk_mb,omitempty"`
+	TTLSeconds       int64             `json:"ttl_seconds,omitempty" jsonschema:"holder lease TTL in seconds"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Signals          []string          `json:"signals,omitempty" jsonschema:"streams to record from boot, e.g. net.flows@1"`
 }
 
 type specJSON struct {
-	Kind       string                  `json:"kind,omitempty"`
-	Image      string                  `json:"image,omitempty"`
-	CPUs       float64                 `json:"cpus,omitempty"`
-	MemoryMB   int64                   `json:"memory_mb,omitempty"`
-	DiskMB     int64                   `json:"disk_mb,omitempty"`
-	Network    string                  `json:"network,omitempty"`
-	TTLSeconds int64                   `json:"ttl_seconds,omitempty"`
-	Labels     map[string]string       `json:"labels,omitempty"`
-	Creds      []envspec.CredRequest   `json:"creds,omitempty"`
-	Signals    []envspec.SignalRequest `json:"signals,omitempty"`
-	Android    *envspec.AndroidOptions `json:"android,omitempty"`
-	Params     map[string]string       `json:"params,omitempty"`
+	Kind             string                  `json:"kind,omitempty"`
+	Image            string                  `json:"image,omitempty"`
+	CPUs             float64                 `json:"cpus,omitempty"`
+	MemoryMB         int64                   `json:"memory_mb,omitempty"`
+	DiskMB           int64                   `json:"disk_mb,omitempty"`
+	Network          string                  `json:"network,omitempty"`
+	PublishedTCPPort uint16                  `json:"published_tcp_port,omitempty"`
+	TTLSeconds       int64                   `json:"ttl_seconds,omitempty"`
+	Labels           map[string]string       `json:"labels,omitempty"`
+	Creds            []envspec.CredRequest   `json:"creds,omitempty"`
+	Signals          []envspec.SignalRequest `json:"signals,omitempty"`
+	Android          *envspec.AndroidOptions `json:"android,omitempty"`
+	Params           map[string]string       `json:"params,omitempty"`
 }
 
 func (ov *overridesIn) apply(spec *envspec.Spec) {
@@ -264,6 +266,9 @@ func (ov *overridesIn) apply(spec *envspec.Spec) {
 	}
 	if ov.Network != "" {
 		spec.Network = envspec.Network(ov.Network)
+	}
+	if ov.PublishedTCPPort != 0 {
+		spec.PublishedTCPPort = ov.PublishedTCPPort
 	}
 	if ov.CPUs > 0 {
 		spec.Resources.CPUs = ov.CPUs
@@ -310,6 +315,7 @@ func (s *set) handleProvision(ctx context.Context, call *call) (any, error) {
 		spec.Image = in.Spec.Image
 		spec.Resources = envspec.Resources{CPUs: in.Spec.CPUs, MemoryMB: in.Spec.MemoryMB, DiskMB: in.Spec.DiskMB}
 		spec.Network = envspec.Network(in.Spec.Network)
+		spec.PublishedTCPPort = in.Spec.PublishedTCPPort
 		if in.Spec.TTLSeconds > 0 {
 			spec.TTL = time.Duration(in.Spec.TTLSeconds) * time.Second
 		}

@@ -235,6 +235,7 @@ type agentEnvInfo struct {
 	AgeSeconds float64               `json:"age_seconds,omitempty"`
 	TTLSeconds float64               `json:"ttl_seconds,omitempty"`
 	Image      string                `json:"image,omitempty"`
+	Endpoints  map[string]string     `json:"endpoints,omitempty"`
 	Components []componentView       `json:"components,omitempty"`
 	Services   []envspec.ServiceInfo `json:"services,omitempty"`
 }
@@ -248,7 +249,7 @@ type componentView struct {
 
 func viewInfo(info envspec.Info) agentEnvInfo {
 	v := agentEnvInfo{Env: info.ID, Kind: string(info.Kind), Profile: info.Profile,
-		State: string(info.State), Workspace: info.Workspace, Image: info.Image, Services: info.Services}
+		State: string(info.State), Workspace: info.Workspace, Image: info.Image, Endpoints: info.Endpoints, Services: info.Services}
 	if !info.Created.IsZero() {
 		v.AgeSeconds = time.Since(info.Created).Seconds()
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/api/types/jsonstream"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/api/types/system"
 	"github.com/moby/moby/client"
 
@@ -204,12 +205,25 @@ func (f *fakeEngine) ContainerInspect(ctx context.Context, target string, o clie
 		status = container.ContainerState("running")
 	}
 	imgRef := ""
+	var netSettings *container.NetworkSettings
 	if c.cfg != nil {
 		imgRef = c.cfg.Image
 	}
+	if c.hostCfg != nil && len(c.hostCfg.PortBindings) > 0 {
+		ports := network.PortMap{}
+		for port, bindings := range c.hostCfg.PortBindings {
+			ports[port] = make([]network.PortBinding, len(bindings))
+			copy(ports[port], bindings)
+			for i := range ports[port] {
+				ports[port][i].HostPort = "49152"
+			}
+		}
+		netSettings = &container.NetworkSettings{Ports: ports}
+	}
 	return client.ContainerInspectResult{Container: container.InspectResponse{
 		ID: c.id, Name: "/" + c.name, Image: imgRef, Config: c.cfg, HostConfig: c.hostCfg,
-		State: &container.State{Status: status, Running: c.running},
+		NetworkSettings: netSettings,
+		State:           &container.State{Status: status, Running: c.running},
 	}}, nil
 }
 

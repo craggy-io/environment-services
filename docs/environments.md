@@ -159,6 +159,10 @@ cancelling the start `ctx`; `Receipt` stays readable afterwards.
 over a shared managed service environment; `StopService(id, generation)` is
 generation-fenced, so a stale stop can never kill a newer incarnation.
 `Manager` satisfies `envspec.ServiceProvider`.
+For a host-side HTTP probe, set `ServiceRequest.Environment.PublishedTCPPort`
+to the container's listening TCP port and select an `open` or `egress`
+network. The Docker adapter publishes an ephemeral loopback-only host port;
+borrowers read its address from `ServiceLease.Info().Endpoints["tcp"]`.
 
 ## Observation and capabilities
 
