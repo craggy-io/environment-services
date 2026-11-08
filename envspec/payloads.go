@@ -308,10 +308,11 @@ type MemoryEvent struct {
 
 // MemoryParams are android.memory@1's collector params.
 type MemoryParams struct {
-	Package         string `json:"package"`
-	IntervalSeconds int    `json:"interval_seconds,omitempty"`
-	MaxMappingBytes int    `json:"max_mapping_bytes,omitempty"`
-	MaxTotalBytes   int    `json:"max_total_bytes,omitempty"`
+	Package             string `json:"package"`
+	IntervalSeconds     int    `json:"interval_seconds,omitempty"`
+	MaxMappingBytes     int    `json:"max_mapping_bytes,omitempty"`
+	MaxTotalBytes       int    `json:"max_total_bytes,omitempty"`
+	MappingPathContains string `json:"mapping_path_contains,omitempty"`
 }
 
 // IPC dispatch kinds observed on android.ipc@1.
