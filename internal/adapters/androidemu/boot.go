@@ -2,6 +2,7 @@ package androidemu
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
@@ -93,6 +94,15 @@ type bootOptions struct {
 	foreground bool // true = show the emulator window instead of -no-window
 }
 
+const quickbootDeviceWait = 2 * time.Minute
+
+func deviceWaitLimit(bo bootOptions) time.Duration {
+	if !bo.writable && !bo.noSnapshot {
+		return quickbootDeviceWait
+	}
+	return 3 * time.Minute
+}
+
 // paramTrue reports whether a boolean driver param is set to "true".
 func paramTrue(s envspec.Spec, key string) bool { return s.Params[key] == "true" }
 
@@ -172,17 +182,22 @@ func (d *Adapter) bootEmulator(ctx context.Context, envID, avdName string, s env
 	inst.wire()
 	inst.saveCache()
 
+	waitCtx, cancelWait := context.WithCancel(ctx)
+	defer cancelWait()
 	bootDone := make(chan error, 1)
-	go func() { bootDone <- d.waitBootCompleted(ctx, inst, progress) }()
+	go func() { bootDone <- d.waitBootCompleted(waitCtx, inst, deviceWaitLimit(bo), progress) }()
 	select {
 	case err := <-bootDone:
 		if err != nil {
-			_ = inst.destroy(context.Background())
-			return nil, err
+			failure := d.bootFailure(inst, args, &emuLog, err)
+			d.cleanupFailedBoot(inst)
+			return nil, failure
 		}
 	case werr := <-exited:
-		_ = inst.destroy(context.Background())
-		return nil, fmt.Errorf("android: emulator exited before boot completed (%v): %s", werr, tailLines(emuLog.String(), 15))
+		cancelWait()
+		failure := d.bootFailure(inst, args, &emuLog, fmt.Errorf("android: emulator exited before boot completed: %v", werr))
+		d.cleanupFailedBoot(inst)
+		return nil, failure
 	}
 	return inst, nil
 }
@@ -196,13 +211,20 @@ type syncBuffer struct {
 func (s *syncBuffer) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.b.Len() > 256<<10 {
-		// Keep only the tail: emulator logs are verbose.
-		cur := s.b.String()
+	const maxTail = 256 << 10
+	length := len(p)
+	if length >= maxTail {
 		s.b.Reset()
-		s.b.WriteString(cur[len(cur)-(128<<10):])
+		_, _ = s.b.Write(p[length-maxTail:])
+		return length, nil
 	}
-	return s.b.Write(p)
+	if excess := s.b.Len() + length - maxTail; excess > 0 {
+		current := s.b.String()
+		s.b.Reset()
+		_, _ = s.b.WriteString(current[excess:])
+	}
+	_, _ = s.b.Write(p)
+	return length, nil
 }
 
 func (s *syncBuffer) String() string {
@@ -243,10 +265,10 @@ func heartbeat(progress func(envspec.Progress), p envspec.Progress) (stop func()
 	return func() { close(done); <-exited }
 }
 
-func (d *Adapter) waitBootCompleted(ctx context.Context, inst *Instance, progress func(envspec.Progress)) error {
+func (d *Adapter) waitBootCompleted(ctx context.Context, inst *Instance, deviceTimeout time.Duration, progress func(envspec.Progress)) error {
 	stop := heartbeat(progress, envspec.Progress{Op: "provision", Stage: "wait-device", EnvID: inst.envID,
 		Message: "waiting for " + inst.serial + " to come online"})
-	err := androiddev.WaitDevice(ctx, d.transport(), inst.serial, 3*time.Minute)
+	err := androiddev.WaitDevice(ctx, d.transport(), inst.serial, deviceTimeout)
 	stop()
 	if err != nil {
 		return err
@@ -317,7 +339,10 @@ func (d *Adapter) Create(ctx context.Context, op adapter.OpContext, s envspec.Sp
 		snapName = v
 	}
 	report("boot", "quickboot from snapshot "+snapName)
-	inst, err := d.bootEmulator(ctx, id, key, s, bootOptions{snapshot: snapName, writable: paramTrue(s, "avd.writable"), foreground: paramTrue(s, "avd.foreground")}, progress)
+	boot := bootOptions{snapshot: snapName, writable: paramTrue(s, "avd.writable"), foreground: paramTrue(s, "avd.foreground")}
+	inst, err := bootWithRetry(ctx, boot, report, func() (*Instance, error) {
+		return d.bootEmulator(ctx, id, key, s, boot, progress)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -331,6 +356,36 @@ func (d *Adapter) Create(ctx context.Context, op adapter.OpContext, s envspec.Sp
 			// optional instruments (§3.9 degraded semantics).
 			_ = err
 		}
+	}
+	return inst, nil
+}
+
+func shouldRetryQuickboot(ctx context.Context, bo bootOptions, err error) bool {
+	if err == nil || ctx.Err() != nil || bo.writable || bo.noSnapshot {
+		return false
+	}
+	var wait *androiddev.DeviceWaitError
+	if !errors.As(err, &wait) || wait.State != "offline" {
+		return false
+	}
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < quickbootDeviceWait/2 {
+		return false
+	}
+	return true
+}
+
+func bootWithRetry(ctx context.Context, bo bootOptions, report func(string, string), launch func() (*Instance, error)) (*Instance, error) {
+	inst, err := launch()
+	if !shouldRetryQuickboot(ctx, bo, err) {
+		return inst, err
+	}
+	if report != nil {
+		report("boot-retry", "adb stayed offline after snapshot quickboot; retrying once from the same snapshot")
+	}
+	first := err
+	inst, err = launch()
+	if err != nil {
+		return nil, fmt.Errorf("android: snapshot quickboot failed twice (first: %v; retry: %w)", first, err)
 	}
 	return inst, nil
 }
