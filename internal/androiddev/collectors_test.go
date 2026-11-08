@@ -3,6 +3,7 @@ package androiddev
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -237,6 +238,49 @@ func TestMemoryMappingSelection(t *testing.T) {
 	}
 	if !shared.selected("challenge.bin") || shared.selected("other.bin") {
 		t.Fatal("path-filtered selection did not admit only the named shared mapping")
+	}
+}
+
+func TestMemoryCollectorRetainsSelectedSharedFixtureMapping(t *testing.T) {
+	// This exercises parameter decoding through an actual cycle. A branch that
+	// parses mapping_path_contains but still scans only private maps fails here.
+	params, err := parseMemoryParams(json.RawMessage(`{"package":"com.example.app","mapping_path_contains":"fixture-shared-map"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := append([]byte("host-fresh-fixture-secret"), make([]byte, memoryPageBytes-len("host-fresh-fixture-secret"))...)
+	encoded := base64.StdEncoding.EncodeToString(secret)
+	transport := &fakeTransport{answer: func(cmd string) (string, int, error) {
+		switch {
+		case strings.Contains(cmd, "boot_id"):
+			return "boot-1\n", 0, nil
+		case strings.Contains(cmd, "pidof"):
+			return "1234\n", 0, nil
+		case strings.Contains(cmd, "/proc/1234/cmdline"):
+			return "com.example.app\x00", 0, nil
+		case strings.Contains(cmd, "/proc/1234/stat"):
+			return "1234 (app) S " + strings.Repeat("0 ", 19) + "12345\n", 0, nil
+		case strings.Contains(cmd, "/proc/1234/maps"):
+			return "70000000-70001000 rw-s 00000000 00:01 123 /data/local/tmp/fixture-shared-map\n70001000-70002000 rw-p 00000000 00:01 124 [heap]\n", 0, nil
+		case strings.Contains(cmd, "dd if=/proc/$1/mem"):
+			return encoded, 0, nil
+		}
+		return "", 0, nil
+	}}
+	dev := New(transport, Config{Serial: "emulator-5556", Root: envspec.RootADB})
+	var events []envspec.MemoryEvent
+	watch := newMemoryWatch(dev, signalcore.EmitterFunc(func(ev envspec.SignalEvent) {
+		if memory, ok := ev.Data.(envspec.MemoryEvent); ok {
+			events = append(events, memory)
+		}
+	}), params)
+	watch.cycle(context.Background())
+	if len(events) != 2 || events[0].Part != "maps" || events[1].Part != "mapping" {
+		t.Fatalf("memory events = %+v", events)
+	}
+	mapping := events[1]
+	if mapping.Kind != "snapshot" || mapping.Perms != "rw-s" || mapping.Path != "/data/local/tmp/fixture-shared-map" || mapping.ReadError != "" || string(mapping.Bytes) != string(secret) || mapping.SHA256 != sha256Hex(secret) {
+		t.Fatalf("shared fixture mapping = %+v", mapping)
 	}
 }
 
