@@ -10,25 +10,59 @@ import (
 	"github.com/craggy-io/environment-services/internal/adapter"
 )
 
+// DeviceWaitError records the last adb observation when a device did not
+// become usable before its bounded wait. State is "absent" when adb never
+// listed the requested serial.
+type DeviceWaitError struct {
+	Serial string
+	State  string
+	Cause  error
+}
+
+func (e *DeviceWaitError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("android: device %s never came online (last adb state %s; adb error: %v)", e.Serial, e.State, e.Cause)
+	}
+	return fmt.Sprintf("android: device %s never came online (last adb state %s)", e.Serial, e.State)
+}
+
 // WaitDevice waits until adb reports the serial as a device.
 func WaitDevice(ctx context.Context, tr Transport, serial string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		devs, err := tr.Devices(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	last := &DeviceWaitError{Serial: serial, State: "absent"}
+	for {
+		probeCtx, probeCancel := context.WithTimeout(waitCtx, 5*time.Second)
+		devs, err := tr.Devices(probeCtx)
+		probeCancel()
 		if err == nil {
+			last.Cause = nil
+			last.State = "absent"
 			for _, dev := range devs {
-				if dev.Serial == serial && dev.State == "device" {
-					return nil
+				if dev.Serial == serial {
+					last.State = dev.State
+					if dev.State == "device" {
+						return nil
+					}
 				}
 			}
+		} else {
+			last.Cause = err
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-waitCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return last
 		case <-time.After(time.Second):
 		}
 	}
-	return fmt.Errorf("android: device %s never came online", serial)
 }
 
 func (d *Device) waitDevice(ctx context.Context, timeout time.Duration) error {
