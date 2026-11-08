@@ -95,10 +95,11 @@ func (a *memoryCollector) Applies(e signalcore.EnvInfo) error {
 }
 func (a *memoryCollector) Params() *jsonschema.Schema {
 	return objSchema(map[string]*jsonschema.Schema{
-		"package":           strSchema(),
-		"interval_seconds":  {Type: "integer"},
-		"max_mapping_bytes": {Type: "integer"},
-		"max_total_bytes":   {Type: "integer"},
+		"package":               strSchema(),
+		"interval_seconds":      {Type: "integer"},
+		"max_mapping_bytes":     {Type: "integer"},
+		"max_total_bytes":       {Type: "integer"},
+		"mapping_path_contains": strSchema(),
 	}, "package")
 }
 func (a *memoryCollector) Run(ctx context.Context, params json.RawMessage, out signalcore.Emitter) error {
@@ -212,7 +213,7 @@ func (w *memoryWatch) cycle(ctx context.Context) {
 	total, omitted := 0, 0
 	var reads []envspec.MemoryEvent
 	for _, m := range mappings {
-		if !m.readablePrivate() {
+		if !m.selected(w.p.MappingPathContains) {
 			continue
 		}
 		if len(reads)+omitted >= MaxMemoryMappings || total >= w.p.MaxTotalBytes {
@@ -340,14 +341,21 @@ type memMapping struct {
 	perms, path        string
 }
 
-// readablePrivate reports whether the mapping is readable and
-// private. Kernel pseudo-mappings a memory read cannot serve are
-// excluded.
-func (m memMapping) readablePrivate() bool {
-	if len(m.perms) != 4 || m.perms[0] != 'r' || m.perms[3] != 'p' {
+// selected reports whether a mapping is admissible for collection. The
+// unfiltered collector keeps its private-only boundary. A path substring filter
+// also admits a readable shared mapping so a declared file-backed challenge
+// cannot be silently omitted.
+func (m memMapping) selected(pathContains string) bool {
+	if len(m.perms) != 4 || m.perms[0] != 'r' {
 		return false
 	}
-	return m.path != "[vvar]" && m.path != "[vdso]"
+	if m.path == "[vvar]" || m.path == "[vdso]" {
+		return false
+	}
+	if pathContains != "" {
+		return strings.Contains(m.path, pathContains)
+	}
+	return m.perms[3] == 'p'
 }
 
 func parseMaps(maps string) []memMapping {

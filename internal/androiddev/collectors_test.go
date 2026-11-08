@@ -217,8 +217,8 @@ func TestParseStateAndMemoryParams(t *testing.T) {
 	if _, err := parseStateParams(json.RawMessage(`{}`)); err == nil {
 		t.Fatal("empty packages accepted")
 	}
-	p, err := parseMemoryParams(json.RawMessage(`{"package":"com.example.app"}`))
-	if err != nil || p.MaxMappingBytes == 0 || p.MaxTotalBytes < p.MaxMappingBytes {
+	p, err := parseMemoryParams(json.RawMessage(`{"package":"com.example.app","mapping_path_contains":"challenge.bin"}`))
+	if err != nil || p.MaxMappingBytes == 0 || p.MaxTotalBytes < p.MaxMappingBytes || p.MappingPathContains != "challenge.bin" {
 		t.Fatalf("memory params = %+v err=%v", p, err)
 	}
 	if _, err := parseMemoryParams(json.RawMessage(`{"package":"com.example.app","max_mapping_bytes":10}`)); err == nil {
@@ -226,6 +226,17 @@ func TestParseStateAndMemoryParams(t *testing.T) {
 	}
 	if _, err := parseFSStateParams(json.RawMessage(`{"roots":["relative/path"]}`)); err == nil {
 		t.Fatal("relative root accepted")
+	}
+}
+
+func TestMemoryMappingSelection(t *testing.T) {
+	private := memMapping{perms: "rw-p", path: "/data/private.bin"}
+	shared := memMapping{perms: "rw-s", path: "/data/challenge.bin"}
+	if !private.selected("") || shared.selected("") {
+		t.Fatal("unfiltered selection did not stay private-only")
+	}
+	if !shared.selected("challenge.bin") || shared.selected("other.bin") {
+		t.Fatal("path-filtered selection did not admit only the named shared mapping")
 	}
 }
 
