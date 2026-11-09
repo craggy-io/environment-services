@@ -67,10 +67,9 @@ authorization are separate work.
 Android emulator and physical-device adapter tests use fake transports for
 many lifecycle and collector cases. A physical device requires an Android
 SDK path, ADB authorization, an explicit serial and an exclusive attach
-lease. No live physical Android device was exercised as part of the
-2026-11-09 checks above. The implementation disconnects physical devices
-on release and does not destroy or reset them; see
-[environments](environments.md) and [capabilities](capabilities.md).
+lease. The implementation disconnects physical devices on release and
+does not destroy or reset them; see [environments](environments.md) and
+[capabilities](capabilities.md).
 
 The adapter has separate opt-in live tests:
 
@@ -80,11 +79,24 @@ go test ./internal/adapters/androidemu -count=1 -v
 
 $env:CRAGGY_TEST_ANDROID_PHYS_SERIAL = '<authorised adb serial>'
 go test ./internal/adapters/androidphys -count=1 -v
+
+$env:CRAGGY_TEST_ANDROID_XFER = '1'
+$env:CRAGGY_ADB_SERIAL = '<adb serial>'   # emulator or physical device
+go test ./internal/androiddev -run TestLiveArchive -count=1 -v
 ```
 
-The emulator test needs an installed Android SDK and prepared system image;
-the physical test uses the named device. These commands were not part of
-the checks recorded here.
+The emulator lifecycle test needs an installed Android SDK and prepared
+system image, and creates its own emulator; the physical and transfer tests
+use the named, already-connected device.
+
+On 2026-11-09 the archive-transfer tests (`TestLiveArchive*`: a tree with
+binary, empty, nested, space-named and 4 MiB files pushed and pulled through
+the device's `tar` over adb, single-file pull, overwrite, workspace-relative
+paths and a failing source) passed on a Pixel 6 and on a running
+`sdk_gphone64_x86_64` emulator. The physical tests (`TestLivePhysicalAttach`
+and `TestLivePhysicalTransferThroughCore`, which attaches through the core
+manager and moves a tree with `Handle.Push`/`Pull`) passed on the same
+Pixel 6. The emulator lifecycle test was not run.
 
 The absence of a tested backend is an unverified deployment path, not a
 reason to infer success from simulated tests. Check each target environment

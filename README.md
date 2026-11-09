@@ -144,6 +144,8 @@ includes sibling modules.
 
 Live tests are skipped unless their environment variable is set:
 `CRAGGY_TEST_DOCKER=1` (and `CRAGGY_TEST_DOCKER_BOOT=1`) for a real Docker daemon,
-`CRAGGY_TEST_ANDROID_EMU=1` for an emulator, and
-`CRAGGY_TEST_ANDROID_PHYS_SERIAL=<serial>` for a physical device. See the
+`CRAGGY_TEST_ANDROID_EMU=1` for an emulator,
+`CRAGGY_TEST_ANDROID_PHYS_SERIAL=<serial>` for a physical device, and
+`CRAGGY_TEST_ANDROID_XFER=1` with `CRAGGY_ADB_SERIAL=<serial>` for file transfer
+on any connected device. See the
 [documentation index](docs/README.md) and [verification evidence and limits](docs/verification.md).

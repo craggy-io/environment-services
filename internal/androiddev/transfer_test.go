@@ -51,7 +51,7 @@ func TestPutArchiveStreamsTarIntoResolvedDestination(t *testing.T) {
 	if err := d.PutArchive(context.Background(), "proj", bytes.NewReader(tarOf(t, want))); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.commands) != 1 || !strings.HasSuffix(f.commands[0], " _ /data/local/tmp/work/proj") {
+	if len(f.commands) != 1 || !strings.HasSuffix(f.commands[0], " craggy-tar /data/local/tmp/work/proj") {
 		t.Fatalf("command = %q, want the relative destination resolved against the workspace as $1", f.commands)
 	}
 	files := untar(t, bytes.NewReader(got))
@@ -90,7 +90,7 @@ func TestGetArchiveStreamsGuestTar(t *testing.T) {
 	if string(files["log.txt"]) != "hello" || !bytes.Equal(files["d/e.bin"], []byte{0, 1, 2, 0xff}) {
 		t.Fatalf("pulled %v", files)
 	}
-	if !strings.HasSuffix(f.commands[0], " _ /sdcard/out") {
+	if !strings.HasSuffix(f.commands[0], " craggy-tar /sdcard/out") {
 		t.Fatalf("command = %q, want the absolute source as $1", f.commands[0])
 	}
 }

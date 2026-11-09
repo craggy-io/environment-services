@@ -31,7 +31,7 @@ func (d *Device) guestPath(p string) string {
 // PutArchive extracts a tar stream into dst, creating it first.
 func (d *Device) PutArchive(ctx context.Context, dst string, tarStream io.Reader) error {
 	dst = d.guestPath(dst)
-	proc, err := d.ExecArgv(ctx, []string{"sh", "-c", putArchiveScript, "_", dst}, "", "", nil, tarStream, 0)
+	proc, err := d.ExecArgv(ctx, []string{"sh", "-c", putArchiveScript, "craggy-tar", dst}, "", "", nil, tarStream, 0)
 	if err != nil {
 		return fmt.Errorf("android: extract into %s: exec: %w", dst, err)
 	}
@@ -49,7 +49,7 @@ func (d *Device) PutArchive(ctx context.Context, dst string, tarStream io.Reader
 // failed guest tar.
 func (d *Device) GetArchive(ctx context.Context, src string) (io.ReadCloser, error) {
 	src = d.guestPath(src)
-	proc, err := d.ExecArgv(ctx, []string{"sh", "-c", getArchiveScript, "_", src}, "", "", nil, nil, 0)
+	proc, err := d.ExecArgv(ctx, []string{"sh", "-c", getArchiveScript, "craggy-tar", src}, "", "", nil, nil, 0)
 	if err != nil {
 		return nil, fmt.Errorf("android: archive %s: exec: %w", src, err)
 	}
