@@ -43,7 +43,7 @@ func ExampleOpen() {
 	fmt.Println("host driver registered:", hasHost)
 	fmt.Println("host-tools ready:", mgr.ProfileStatus("host-tools").Ready)
 	// Output:
-	// stock profiles: [android android-play android-play-rooted host-tools linux-tools]
+	// stock profiles: [android android-physical android-play android-play-rooted host-tools linux-tools]
 	// host driver registered: true
 	// host-tools ready: true
 }

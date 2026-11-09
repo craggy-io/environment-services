@@ -2,7 +2,7 @@
 
 `envcap` projects a manager into a
 [`capability-services`](https://github.com/craggy-io/capability-services)
-registry: `Capabilities(Deps)` returns `registry.Capability` values (38,
+registry: `Capabilities(Deps)` returns `registry.Capability` values (39,
 grouped by `Groups()`), ready for `Registry.Add`/`AddGroup`, so every
 registry projection (HTTP, MCP, tools, Starlark) sees the same surface.
 
@@ -19,11 +19,11 @@ structurally (compile-time asserted in `environments`). envcap imports no
 Starlark: hosts assemble a Starlark surface themselves
 (capability-services' `starlarkcap`).
 
-## The 38 capabilities
+## The 39 capabilities
 
 | Group | Capabilities |
 | --- | --- |
-| `env` | `env.status`, `env.profiles.list`, `env.provision`, `env.list`, `env.get`, `env.release`, `env.keepalive`, `env.exec`, `env.fs.list`, `env.fs.stat`, `env.push`, `env.pull`, `env.snapshot.save`, `env.snapshot.load`, `env.snapshot.list` |
+| `env` | `env.status`, `env.profiles.list`, `env.provision`, `env.attach`, `env.list`, `env.get`, `env.release`, `env.keepalive`, `env.exec`, `env.fs.list`, `env.fs.stat`, `env.push`, `env.pull`, `env.snapshot.save`, `env.snapshot.load`, `env.snapshot.list` |
 | `env.android` | `env.android.install`, `env.android.screenshot`, `env.android.input`, `env.android.type-secret`, `env.android.frida.hook` |
 | `host` | `host.status` |
 | `vault` | `vault.creds.list`, `vault.lease`, `vault.release`, `vault.creds.put` (admin), `vault.creds.delete` (admin), `vault.creds.policy.set` (admin) |
@@ -38,9 +38,23 @@ reason (`no_capacity`, `backend_down`, …) so agents can decide whether to
 retry. Long operations report `envspec.Progress` verbatim as registry job
 progress.
 
+For a USB device already authorised for ADB debugging, use
+`env.attach {"serial":"DEVICE_SERIAL","key":"optional-retry-key"}`.
+The `android-physical` profile uses an unrooted device configuration.
+The attach verifies identity and claims an exclusive local lease; `env.release`
+disconnects the lab without wiping the device. Device commands and app
+experiments can still change the device, so callers must choose those
+actions deliberately.
+For an already rooted device requiring instrumentation, explicitly use
+`env.attach {"serial":"DEVICE_SERIAL","root":"magisk","frida":true}`.
+This requests a Magisk root shell and may push and start a managed
+frida-server; `frida:true` without an explicit root mode is rejected.
+The physical adapter reads `ro.product.cpu.abi` so it selects the matching
+Frida binary on arm64 devices.
+
 ## Operations and artifacts
 
-Lifecycle handlers (`env.provision`, `env.release`) start the durable
+Lifecycle handlers (`env.provision`, `env.attach`, `env.release`) start the durable
 lifecycle operation first, then stamp `operation_id`, `job_id`, `env`,
 `generation` and `lease_epoch` **distinctly** into results: the registry job
 is a projection (after a restart the job is lost; the operation resumes, and

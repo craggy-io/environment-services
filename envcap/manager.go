@@ -23,6 +23,7 @@ import (
 type Manager interface {
 	// Environments.
 	ProvisionEnv(ctx context.Context, req ProvisionRequest) (EnvResult, error)
+	AttachEnv(ctx context.Context, req ProvisionRequest) (EnvResult, error)
 	ReleaseEnv(ctx context.Context, id string) (EnvResult, error)
 	EnvInfo(id string) (envspec.Info, error)
 	EnvIdentity(id string) (EnvIdentity, error)
@@ -79,7 +80,7 @@ type Manager interface {
 	RecentRuleTriggers(since time.Time, rule string) []RuleTrigger
 }
 
-// ProvisionRequest is one provision call. Progress may be nil.
+// ProvisionRequest is one provision or attach call. Progress may be nil.
 type ProvisionRequest struct {
 	Owner    envspec.Owner
 	Spec     envspec.Spec
@@ -93,7 +94,7 @@ type ProvisionRequest struct {
 // lifecycle work without a durable operation does not happen.
 type EnvResult struct {
 	Env         string
-	Info        envspec.Info // provision only; zero after release
+	Info        envspec.Info // provision or attach; zero after release
 	OperationID string
 	Generation  int64
 	LeaseEpoch  int64

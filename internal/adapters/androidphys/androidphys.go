@@ -246,6 +246,23 @@ func (a *Adapter) verifyIdentity(ctx context.Context, serial string) (string, er
 	return roSerial, nil
 }
 
+func (a *Adapter) withDeviceABI(ctx context.Context, serial string, spec envspec.Spec) (envspec.Spec, error) {
+	if spec.Android != nil && spec.Android.ABI != "" {
+		return spec, nil
+	}
+	abi, code, err := a.transport().Run(ctx, serial, "getprop ro.product.cpu.abi")
+	if err != nil || code != 0 || strings.TrimSpace(abi) == "" {
+		return spec, fmt.Errorf("android: read device ABI on %s (exit %d): %v", serial, code, err)
+	}
+	options := envspec.AndroidOptions{}
+	if spec.Android != nil {
+		options = *spec.Android
+	}
+	options.ABI = strings.TrimSpace(abi)
+	spec.Android = &options
+	return spec, nil
+}
+
 func (a *Adapter) claim(serial, envID string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -280,6 +297,10 @@ func (a *Adapter) Attach(ctx context.Context, op adapter.OpContext, s envspec.Sp
 	if err != nil {
 		return nil, err
 	}
+	s, err = a.withDeviceABI(ctx, serial, s)
+	if err != nil {
+		return nil, err
+	}
 	if err := a.claim(serial, op.EnvID); err != nil {
 		return nil, err
 	}
@@ -299,14 +320,19 @@ func (a *Adapter) Attach(ctx context.Context, op adapter.OpContext, s envspec.Sp
 // restart. The device still exists independently; Open re-takes the
 // in-process claim without re-verifying identity (Observe and the
 // component probes report the truth from there).
-func (a *Adapter) Open(ctx context.Context, op adapter.OpContext, ref adapter.Ref) (adapter.Instance, error) {
+func (a *Adapter) Open(ctx context.Context, op adapter.OpContext, ref adapter.Ref, spec envspec.Spec) (adapter.Instance, error) {
 	if ref.External == "" {
 		return nil, fmt.Errorf("android: no serial recorded for %s", ref.EnvID)
+	}
+	var err error
+	spec, err = a.withDeviceABI(ctx, ref.External, spec)
+	if err != nil {
+		return nil, err
 	}
 	if err := a.claim(ref.External, ref.EnvID); err != nil {
 		return nil, err
 	}
-	inst := &Instance{ad: a, envID: ref.EnvID, serial: ref.External}
+	inst := &Instance{ad: a, envID: ref.EnvID, serial: ref.External, spec: spec}
 	inst.wire()
 	return inst, nil
 }

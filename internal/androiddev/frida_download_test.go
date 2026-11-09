@@ -15,6 +15,13 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
+// Android reports arm64-v8a through getprop, while Frida publishes arm64 binaries.
+func TestFridaArchNameAndroidABI(t *testing.T) {
+	if got := fridaArchName("arm64-v8a"); got != "arm64" {
+		t.Fatalf("frida architecture = %q, want arm64", got)
+	}
+}
+
 func xzBytes(t *testing.T, payload []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer

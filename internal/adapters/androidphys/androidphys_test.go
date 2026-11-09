@@ -144,6 +144,21 @@ func TestAttachVerifiesIdentity(t *testing.T) {
 	}
 }
 
+func TestAttachDetectsPhysicalABI(t *testing.T) {
+	f := newFakePhys()
+	f.cpuABI = "arm64-v8a"
+	a := New()
+	a.Transport = f
+	inst, err := a.Attach(context.Background(), adapter.OpContext{EnvID: "env_arm64"}, physSpec(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := inst.(*Instance)
+	if got.spec.Android.ABI != "arm64-v8a" || got.Arch() != "arm64" {
+		t.Fatalf("physical ABI not propagated: spec=%q arch=%q", got.spec.Android.ABI, got.Arch())
+	}
+}
+
 func TestDetachRemovesOnlyOwnedFrida(t *testing.T) {
 	ctx := context.Background()
 	// Fake frida-server binary for repair to push.

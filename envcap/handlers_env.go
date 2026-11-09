@@ -31,20 +31,25 @@ func (s *set) build() []capability {
 		Input:       inputSchema[statusIn](),
 		Handler:     s.handleStatus})
 	add(capability{Name: "env.profiles.list", Version: 1, Effects: "readonly", Tags: []string{"agent"},
-		Description: "List environment profiles with when to choose each one. ready:false means the profile's base (system image and clean snapshot, or container image) is not built yet; not_ready says what is missing, and the first env.provision builds it, which takes minutes.",
+		Description: "List environment profiles with when to choose each one. ready:false gives the reason in not_ready. Android-physical is for env.attach; other profiles are for env.provision.",
 		Handler:     s.handleProfilesList})
 	add(capability{Name: "env.provision", Version: 1, Effects: "long", Tags: []string{"agent"},
 		Description: "Create a ready-to-use environment from a profile. One call: booted, set up, nothing else to do. Optional key makes retries safe. Android emulators boot headless (background); pass foreground:true only when a person needs to watch the emulator window. A provision that fails leaves nothing to release.",
 		Input:       inputSchema[provisionIn](),
 		Check:       s.checkManager,
 		Handler:     s.handleProvision})
+	add(capability{Name: "env.attach", Version: 1, Effects: "long", Tags: []string{"agent"},
+		Description: "Lease an existing USB Android device by ADB serial. By default no root or Frida setup is requested. To instrument a rooted device, pass root:magisk (or adb) and frida:true; this may push and start frida-server. Releasing disconnects without wiping apps or data. Optional key makes retries safe.",
+		Input:       inputSchema[attachIn](),
+		Check:       s.checkManager,
+		Handler:     s.handleAttach})
 	add(capability{Name: "env.list", Version: 1, Effects: "readonly", Tags: []string{"agent"},
 		Description: "List the environments you hold (the same set env.status reports).", Handler: s.handleList})
 	add(capability{Name: "env.get", Version: 1, Effects: "readonly", Tags: []string{"agent"},
 		Description: "One environment's state, workspace and component health.",
 		Input:       inputSchema[envIDIn](), Handler: s.handleGet})
 	add(capability{Name: "env.release", Version: 1, Effects: "mutating", Tags: []string{"agent"},
-		Description: "Destroy an environment and everything in it. Idempotent.",
+		Description: "Release an environment. Created environments are destroyed; attached physical devices are disconnected without wiping their apps or data. Idempotent.",
 		Input:       inputSchema[envIDIn](), Handler: s.handleRelease})
 	add(capability{Name: "env.keepalive", Version: 1, Effects: "mutating", Tags: []string{"agent"},
 		Description: "Extend an environment's holder lease. This is the only renewal: using an environment does not renew it.",
@@ -204,7 +209,11 @@ func (s *set) handleProfilesList(ctx context.Context, call *call) (any, error) {
 		ready := st.Ready
 		po.Ready = &ready
 		if !ready {
-			po.NotReady = notReadyText(st.NotReady)
+			if p.Name == "android-physical" {
+				po.NotReady = st.NotReady
+			} else {
+				po.NotReady = notReadyText(st.NotReady)
+			}
 		}
 		out = append(out, po)
 	}
@@ -302,6 +311,9 @@ func (s *set) handleProvision(ctx context.Context, call *call) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if in.Profile == "android-physical" {
+		return nil, &agentError{Code: "invalid", Message: "use env.attach with a physical device serial"}
+	}
 	if in.Profile != "" && in.Spec == nil {
 		if _, ok := s.deps.Manager.Profile(in.Profile); !ok {
 			return nil, &agentError{Code: "invalid",
@@ -345,6 +357,56 @@ func (s *set) handleProvision(ctx context.Context, call *call) (any, error) {
 	return s.stampLifecycle(ctx, out, res), nil
 }
 
+type attachIn struct {
+	Serial string `json:"serial" jsonschema:"ADB serial of an authorised physical Android device"`
+	Key    string `json:"key,omitempty" jsonschema:"idempotency key: repeating attach with the same key returns the same lease"`
+	NoWait bool   `json:"no_wait,omitempty" jsonschema:"fail instead of queueing when the host is at capacity"`
+	Root   string `json:"root,omitempty" jsonschema:"explicit root mode: none (default), magisk, or adb"`
+	Frida  bool   `json:"frida,omitempty" jsonschema:"opt in to pushing and starting managed frida-server on this device"`
+}
+
+func (s *set) handleAttach(ctx context.Context, call *call) (any, error) {
+	if err := requireManager(s); err != nil {
+		return nil, err
+	}
+	var in attachIn
+	if err := decode(call, &in); err != nil {
+		return nil, err
+	}
+	serial := strings.TrimSpace(in.Serial)
+	if serial == "" || strings.HasPrefix(serial, "emulator-") {
+		return nil, &agentError{Code: "invalid", Message: "serial must name an authorised physical Android device"}
+	}
+	root := envspec.RootMode(in.Root)
+	if root == "" {
+		root = envspec.RootNone
+	}
+	if root != envspec.RootNone && root != envspec.RootMagisk && root != envspec.RootADB {
+		return nil, &agentError{Code: "invalid", Message: "root must be none, magisk or adb"}
+	}
+	if in.Frida && root == envspec.RootNone {
+		return nil, &agentError{Code: "invalid", Message: "frida requires an explicit magisk or adb root mode"}
+	}
+	android := &envspec.AndroidOptions{Root: root}
+	if in.Frida {
+		android.Frida = &envspec.FridaOptions{}
+	}
+	owner, err := s.owner(ctx)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.deps.Manager.AttachEnv(ctx, ProvisionRequest{Owner: owner,
+		Spec: envspec.Spec{Profile: "android-physical", Key: in.Key,
+			Params: map[string]string{"adb.serial": serial}, Android: android},
+		Progress: call.Progress, NoWait: in.NoWait})
+	if err != nil {
+		return nil, err
+	}
+	call.opid = res.OperationID
+	out := map[string]any{"env": res.Env, "info": viewInfo(res.Info)}
+	return s.stampLifecycle(ctx, out, res), nil
+}
+
 func (s *set) handleList(ctx context.Context, call *call) (any, error) {
 	if err := requireManager(s); err != nil {
 		return nil, err
@@ -357,7 +419,7 @@ func (s *set) handleList(ctx context.Context, call *call) (any, error) {
 }
 
 type envIDIn struct {
-	Env string `json:"env" jsonschema:"environment id (env_…) from env.provision, env.list or env.status"`
+	Env string `json:"env" jsonschema:"environment id (env_…) from env.provision, env.attach, env.list or env.status"`
 }
 
 func (s *set) handleGet(ctx context.Context, call *call) (any, error) {

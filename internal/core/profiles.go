@@ -68,6 +68,14 @@ func StockProfiles() []envspec.Profile {
 			Android: &envspec.AndroidOptions{API: 34, Image: envspec.GooglePlay, Root: envspec.RootNone},
 		},
 		{
+			Name: "android-physical", Kind: envspec.Android,
+			Description:   "Attach an existing USB-debuggable Android device by serial; does not install, reset or erase apps",
+			Network:       envspec.NetworkOpen,
+			AllowNetworks: []envspec.Network{envspec.NetworkOpen},
+			TTL:           time.Hour, MaxTTL: 8 * time.Hour,
+			Android: &envspec.AndroidOptions{Root: envspec.RootNone},
+		},
+		{
 			Name: "android-play-rooted", Kind: envspec.Android,
 			Description:   "google_apis_playstore rooted with Magisk, Frida ready; Play Store apps that also need instrumentation",
 			Resources:     envspec.Resources{CPUs: 2, MemoryMB: 3072, DiskMB: 8192},
@@ -427,7 +435,8 @@ func (m *Manager) profileReady(name string) error {
 	if ready {
 		return nil
 	}
-	ad, found := m.adapterFor(kind, false)
+	attach := name == "android-physical"
+	ad, found := m.adapterFor(kind, attach)
 	if !found {
 		return fmt.Errorf("%w: no adapter for kind %q", envspec.ErrNotReady, kind)
 	}

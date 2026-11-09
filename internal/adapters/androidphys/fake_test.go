@@ -18,6 +18,7 @@ type fakePhysTransport struct {
 	devices   []adb.Device
 	devErr    error
 	roSerial  string
+	cpuABI    string
 	commands  []string
 	syncSent  []string
 	forwards  [][2]int
@@ -30,6 +31,7 @@ func newFakePhys() *fakePhysTransport {
 	return &fakePhysTransport{
 		devices:  []adb.Device{{Serial: "PIXEL1", State: "device"}, {Serial: "emulator-5554", State: "device"}},
 		roSerial: "PIXEL1",
+		cpuABI:   "x86_64",
 	}
 }
 
@@ -40,6 +42,8 @@ func (f *fakePhysTransport) Run(ctx context.Context, serial, cmd string) (string
 	switch {
 	case strings.Contains(cmd, "getprop ro.serialno"):
 		return f.roSerial + "\n", 0, nil
+	case strings.Contains(cmd, "getprop ro.product.cpu.abi"):
+		return f.cpuABI + "\n", 0, nil
 	case strings.Contains(cmd, "pidof"):
 		if f.fridaUp.Load() {
 			return "4321\n", 0, nil

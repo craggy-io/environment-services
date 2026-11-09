@@ -104,7 +104,7 @@ func (a *Attached) Attach(ctx context.Context, op adapter.OpContext, s envspec.S
 	return inst, nil
 }
 
-func (a *Attached) Open(ctx context.Context, op adapter.OpContext, ref adapter.Ref) (adapter.Instance, error) {
+func (a *Attached) Open(ctx context.Context, op adapter.OpContext, ref adapter.Ref, spec envspec.Spec) (adapter.Instance, error) {
 	if sc := a.script(); sc.OpenErr != nil {
 		return nil, adapter.BackendDown(sc.OpenErr)
 	}

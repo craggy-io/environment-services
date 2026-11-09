@@ -145,7 +145,8 @@ type Creator interface {
 // devices). Attach verifies identity; release disconnects only.
 type Attacher interface {
 	Attach(ctx context.Context, op OpContext, spec envspec.Spec, progress func(envspec.Progress)) (Instance, error)
-	Open(ctx context.Context, op OpContext, ref Ref) (Instance, error)
+	// Open re-materialises the attachment using its persisted spec.
+	Open(ctx context.Context, op OpContext, ref Ref, spec envspec.Spec) (Instance, error)
 }
 
 // Coster reports an env's admission cost. Without it the core derives

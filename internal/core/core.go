@@ -651,7 +651,7 @@ func (m *Manager) reopenRuntime(ctx context.Context, e store.Env, ad adapter.Ada
 	case adapter.Creator:
 		inst, _ = a.Open(ctx, oc, ref)
 	case adapter.Attacher:
-		inst, _ = a.Open(ctx, oc, ref)
+		inst, _ = a.Open(ctx, oc, ref, e.Spec)
 	}
 	if inst == nil {
 		return // op loop / provision resume retries

@@ -248,7 +248,7 @@ func (m *Manager) instanceFor(ctx context.Context, e store.Env, ad adapter.Adapt
 			inst, _ := a.Open(ctx, oc, ref)
 			return inst
 		case adapter.Attacher:
-			inst, _ := a.Open(ctx, oc, ref)
+			inst, _ := a.Open(ctx, oc, ref, e.Spec)
 			return inst
 		}
 		return nil

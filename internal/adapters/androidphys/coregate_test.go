@@ -31,9 +31,13 @@ var physProfile = envspec.Profile{
 }
 
 func physManager(t *testing.T, a *Adapter, pol envspec.MutationPolicy) *core.Manager {
+	return physManagerAt(t, t.TempDir(), a, pol)
+}
+
+func physManagerAt(t *testing.T, dir string, a *Adapter, pol envspec.MutationPolicy) *core.Manager {
 	t.Helper()
 	m, err := core.Open(context.Background(), core.Config{
-		Dir: t.TempDir(), ManagerID: "mgr-phys",
+		Dir: dir, ManagerID: "mgr-phys",
 		Adapters:       []adapter.Adapter{a},
 		Signals:        signalcore.NewHub(),
 		Profiles:       []envspec.Profile{physProfile},
@@ -47,6 +51,50 @@ func physManager(t *testing.T, a *Adapter, pol envspec.MutationPolicy) *core.Man
 	}
 	t.Cleanup(func() { _ = m.Close(context.Background(), core.ShutdownDisconnect) })
 	return m
+}
+
+func TestCoreReopensPhysicalDeviceWithPersistedInstrumentation(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	f := newFakePhys()
+	f.cpuABI = "arm64-v8a"
+	a1 := New()
+	a1.Transport = f
+	m1 := physManagerAt(t, dir, a1, nil)
+	spec := envspec.Spec{Profile: "phys", Params: map[string]string{ParamSerial: "PIXEL1"},
+		Android: &envspec.AndroidOptions{Root: envspec.RootMagisk, Frida: &envspec.FridaOptions{Version: fridaTestVersion()}}}
+	h, err := m1.Attach(ctx, envspec.Owner{ID: "agent:restart", Session: "s1"}, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envID := h.ID()
+	if err := m1.Close(ctx, core.ShutdownDisconnect); err != nil {
+		t.Fatal(err)
+	}
+	a2 := New()
+	a2.Transport = f
+	m2 := physManagerAt(t, dir, a2, nil)
+	eventually(t, "physical attachment reopened", func() bool {
+		h2, err := m2.Get(envID)
+		if err != nil {
+			return false
+		}
+		_, err = m2.Instance(h2)
+		return err == nil
+	})
+	h2, err := m2.Get(envID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst, err := m2.Instance(h2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := inst.(*Instance)
+	if got.spec.Android == nil || got.spec.Android.Root != envspec.RootMagisk || got.spec.Android.Frida == nil ||
+		got.spec.Android.ABI != "arm64-v8a" || got.Device().RootMode() != envspec.RootMagisk {
+		t.Fatalf("reopened physical config = %+v", got.spec.Android)
+	}
 }
 
 func eventually(t *testing.T, what string, cond func() bool) {
@@ -208,19 +256,18 @@ func TestCoreExperimentHoldBlocksFridaRepair(t *testing.T) {
 		t.Fatalf("repair pushed frida-server %d times under experiment hold", got)
 	}
 	// An activity.held event names the hold.
-	evs, err := m.EventsSince(ctx, 0, 200)
-	if err != nil {
-		t.Fatal(err)
-	}
-	held := false
-	for _, ev := range evs {
-		if ev.Kind == "activity.held" {
-			held = true
+	eventually(t, "activity.held event", func() bool {
+		evs, err := m.EventsSince(ctx, 0, 200)
+		if err != nil {
+			return false
 		}
-	}
-	if !held {
-		t.Fatalf("no activity.held event in %d events", len(evs))
-	}
+		for _, ev := range evs {
+			if ev.Kind == "activity.held" {
+				return true
+			}
+		}
+		return false
+	})
 
 	// Lift the hold: the repair runs (push + start), the daemon
 	// comes up in the fake, and the condition recovers.

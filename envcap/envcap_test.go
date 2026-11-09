@@ -174,7 +174,7 @@ func (f *fakeManager) ProvisionEnv(ctx context.Context, req envcap.ProvisionRequ
 		req.Progress(envspec.Progress{Op: "provision", Stage: "creating", EnvID: id})
 	}
 	kind := envspec.Container
-	if req.Spec.Profile == "android-play" {
+	if req.Spec.Profile == "android-play" || req.Spec.Profile == "android-physical" {
 		kind = envspec.Android
 	}
 	e := &fakeEnv{spec: req.Spec, files: map[string][]byte{}, opID: fmt.Sprintf("op_durable_%d", f.seq)}
@@ -185,6 +185,13 @@ func (f *fakeManager) ProvisionEnv(ctx context.Context, req envcap.ProvisionRequ
 		f.byKey[req.Spec.Key] = id
 	}
 	return envcap.EnvResult{Env: id, Info: e.info, OperationID: e.opID, Generation: 1, LeaseEpoch: 1}, nil
+}
+
+func (f *fakeManager) AttachEnv(ctx context.Context, req envcap.ProvisionRequest) (envcap.EnvResult, error) {
+	if req.Spec.Profile != "android-physical" || req.Spec.Params["adb.serial"] == "" {
+		return envcap.EnvResult{}, fmt.Errorf("%w: missing physical attach spec", envspec.ErrInvalid)
+	}
+	return f.ProvisionEnv(ctx, req)
 }
 
 func (f *fakeManager) ReleaseEnv(ctx context.Context, id string) (envcap.EnvResult, error) {
@@ -241,6 +248,7 @@ func (f *fakeManager) Profiles() []envspec.Profile {
 	return []envspec.Profile{
 		{Name: "linux-tools", Kind: envspec.Container, Description: "small linux toolbox"},
 		{Name: "android-play", Kind: envspec.Android, Description: "play-store android"},
+		{Name: "android-physical", Kind: envspec.Android, Description: "physical android"},
 	}
 }
 
@@ -656,7 +664,7 @@ func call(t *testing.T, reg *registry.Registry, name string, in map[string]any) 
 func TestCapabilitySurfaceComplete(t *testing.T) {
 	reg, _, _ := setupSet(t)
 	want := []string{
-		"env.status", "env.profiles.list", "env.provision", "env.list", "env.get",
+		"env.status", "env.profiles.list", "env.provision", "env.attach", "env.list", "env.get",
 		"env.release", "env.keepalive", "env.exec", "env.fs.list", "env.fs.stat",
 		"env.push", "env.pull", "env.snapshot.save", "env.snapshot.load", "env.snapshot.list",
 		"env.android.install", "env.android.screenshot", "env.android.input",
@@ -700,6 +708,49 @@ func TestCapabilitySurfaceComplete(t *testing.T) {
 	}
 	if c := have["env.exec"]; !c.HasTag("exec") {
 		t.Errorf("env.exec must carry the exec tag")
+	}
+}
+
+func TestAttachPhysicalDeviceCapability(t *testing.T) {
+	reg, mgr, _ := setupSet(t)
+	b, _ := json.Marshal(map[string]any{"profile": "android-physical"})
+	if _, err := reg.Invoke(context.Background(), "env.provision", b); err == nil {
+		t.Fatal("physical profile must use env.attach")
+	}
+	for _, serial := range []string{"", "emulator-5554"} {
+		b, _ := json.Marshal(map[string]any{"serial": serial})
+		if _, err := reg.Invoke(context.Background(), "env.attach", b); err == nil {
+			t.Fatalf("attach serial %q unexpectedly succeeded", serial)
+		}
+	}
+	for _, in := range []map[string]any{
+		{"serial": "PIXEL-TEST", "root": "unknown"},
+		{"serial": "PIXEL-TEST", "frida": true},
+	} {
+		b, _ := json.Marshal(in)
+		if _, err := reg.Invoke(context.Background(), "env.attach", b); err == nil {
+			t.Fatalf("attach with invalid instrumentation options unexpectedly succeeded: %v", in)
+		}
+	}
+	first := call(t, reg, "env.attach", map[string]any{"serial": "PIXEL-TEST", "key": "physical-1"})
+	envID, _ := first["env"].(string)
+	if envID == "" || first["operation_id"] == "" || first["lease_epoch"] == nil {
+		t.Fatalf("attach omitted lifecycle identity: %v", first)
+	}
+	if got := mgr.envs[envID].spec.Params["adb.serial"]; got != "PIXEL-TEST" {
+		t.Fatalf("attach serial = %q", got)
+	}
+	if opts := mgr.envs[envID].spec.Android; opts == nil || opts.Root != envspec.RootNone || opts.Frida != nil {
+		t.Fatalf("default attach requested instrumentation: %+v", opts)
+	}
+	again := call(t, reg, "env.attach", map[string]any{"serial": "PIXEL-TEST", "key": "physical-1"})
+	if again["env"] != envID || again["operation_id"] != first["operation_id"] {
+		t.Fatalf("retry did not return durable attach: first=%v again=%v", first, again)
+	}
+	instrumented := call(t, reg, "env.attach", map[string]any{"serial": "PIXEL-ROOTED", "key": "physical-2", "root": "magisk", "frida": true})
+	rootedEnv := instrumented["env"].(string)
+	if opts := mgr.envs[rootedEnv].spec.Android; opts == nil || opts.Root != envspec.RootMagisk || opts.Frida == nil {
+		t.Fatalf("instrumented attach omitted Magisk/Frida options: %+v", opts)
 	}
 }
 

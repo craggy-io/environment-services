@@ -191,6 +191,10 @@ func TestOpenHostSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pin(env.resources, host env): %v", err)
 	}
+	startDeadline := time.Now().Add(3 * time.Second)
+	for !obs.ConfiguredState(envspec.StreamEnvResources, h.ID(), nil).Running && time.Now().Before(startDeadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
 	if st := obs.ConfiguredState(envspec.StreamEnvResources, h.ID(), nil); !st.Running {
 		t.Fatalf("ConfiguredState after Pin = %+v, want running", st)
 	}

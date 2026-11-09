@@ -210,7 +210,7 @@ func fridaArchName(arch string) string {
 	switch arch {
 	case "amd64", "x86_64":
 		return "x86_64"
-	case "arm64":
+	case "arm64", "arm64-v8a":
 		return "arm64"
 	default:
 		return arch

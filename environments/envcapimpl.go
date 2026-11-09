@@ -98,6 +98,15 @@ func (d *EnvCapDeps) latestOp(envID string, kind store.OpKind) (string, error) {
 // ProvisionEnv provisions via the durable operation machinery and
 // reports its operation id plus the holder fencing identity.
 func (d *EnvCapDeps) ProvisionEnv(ctx context.Context, req envcap.ProvisionRequest) (envcap.EnvResult, error) {
+	return d.acquireEnv(ctx, req, false)
+}
+
+// AttachEnv leases an existing resource through the physical adapter.
+func (d *EnvCapDeps) AttachEnv(ctx context.Context, req envcap.ProvisionRequest) (envcap.EnvResult, error) {
+	return d.acquireEnv(ctx, req, true)
+}
+
+func (d *EnvCapDeps) acquireEnv(ctx context.Context, req envcap.ProvisionRequest, attach bool) (envcap.EnvResult, error) {
 	opts := []core.ProvisionOption{}
 	if req.Progress != nil {
 		opts = append(opts, core.OnProgress(req.Progress))
@@ -105,15 +114,25 @@ func (d *EnvCapDeps) ProvisionEnv(ctx context.Context, req envcap.ProvisionReque
 	if req.NoWait {
 		opts = append(opts, core.NoWait())
 	}
-	h, err := d.m.core.Provision(ctx, req.Owner, req.Spec, opts...)
+	acquire := d.m.core.Provision
+	kind := store.OpProvision
+	if attach {
+		acquire = d.m.core.Attach
+		kind = store.OpAttach
+	}
+	h, err := acquire(ctx, req.Owner, req.Spec, opts...)
 	if err != nil {
 		return envcap.EnvResult{}, xlate(err)
 	}
-	opID, err := d.latestOp(h.EnvID, store.OpProvision)
+	opID, err := d.latestOp(h.EnvID, kind)
 	if err != nil {
-		// Warm claims record under the original provision; attach
-		// under attach. Try both before giving up.
-		if opID, err = d.latestOp(h.EnvID, store.OpAttach); err != nil {
+		// A warm claim records under its original provision, while
+		// a later attach records under attach.
+		other := store.OpAttach
+		if attach {
+			other = store.OpProvision
+		}
+		if opID, err = d.latestOp(h.EnvID, other); err != nil {
 			return envcap.EnvResult{}, err
 		}
 	}
