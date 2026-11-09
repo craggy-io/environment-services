@@ -1,6 +1,6 @@
 package androidphys
 
-// Core-driven §10 gates against the physical adapter with a fake adb
+// Core-driven lifecycle gates against the physical adapter with a fake adb
 // transport: #8 a required Android collector dies after readiness ->
 // its signal condition goes False and the activity is restarted; #9
 // an experiment hold (MutationPolicy denial) stops the frida

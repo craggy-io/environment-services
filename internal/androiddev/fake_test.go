@@ -23,7 +23,12 @@ type fakeTransport struct {
 	syncSent []string
 	forwards [][3]int // serial-less: local, remote, _
 	emuAns   map[string]string
+	// stream, when it returns a func for a Shell command, runs that
+	// command as a live process: stdin in, stdout out, then stderr+exit.
+	stream func(cmd string) streamFn
 }
+
+type streamFn func(stdin io.Reader, stdout io.Writer) (stderr string, code int)
 
 func (f *fakeTransport) run(cmd string) (string, int, error) {
 	f.mu.Lock()
@@ -41,6 +46,14 @@ func (f *fakeTransport) Run(ctx context.Context, serial, cmd string) (string, in
 }
 
 func (f *fakeTransport) Shell(ctx context.Context, serial, cmd string) (*ShellSession, error) {
+	if f.stream != nil {
+		if fn := f.stream(cmd); fn != nil {
+			f.mu.Lock()
+			f.commands = append(f.commands, cmd)
+			f.mu.Unlock()
+			return streamSession(fn), nil
+		}
+	}
 	if f.blockOn != "" && strings.Contains(cmd, f.blockOn) {
 		f.mu.Lock()
 		f.commands = append(f.commands, cmd)
@@ -62,6 +75,25 @@ func (f *fakeTransport) Shell(ctx context.Context, serial, cmd string) (*ShellSe
 		Wait:   func() (int, error) { return code, nil },
 		Kill:   func() error { return nil },
 	}, nil
+}
+
+func streamSession(fn streamFn) *ShellSession {
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	errR, errW := io.Pipe()
+	done := make(chan struct{})
+	var code int
+	go func() {
+		defer close(done)
+		var msg string
+		msg, code = fn(inR, outW)
+		_ = outW.Close()
+		_, _ = io.WriteString(errW, msg)
+		_ = errW.Close()
+	}()
+	return &ShellSession{Stdout: outR, Stderr: errR, Stdin: inW,
+		Wait: func() (int, error) { <-done; return code, nil },
+		Kill: func() error { _ = outR.Close(); _ = inR.Close(); return nil }}
 }
 
 type nopWriteCloser struct{}

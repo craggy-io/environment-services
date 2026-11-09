@@ -10,7 +10,7 @@ import (
 	"github.com/craggy-io/environment-services/internal/store"
 )
 
-// §10 #5, harder half: the backend is down at manager restart so
+// Recovery gate, harder half: the backend is down at manager restart so
 // recovery cannot even Open (re-materialise) a present env. The env
 // must stay present/unknown — and must become usable again, without
 // another manager restart, once the backend returns.

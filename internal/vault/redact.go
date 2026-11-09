@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-// Redactor matches secret values under active leases (§6.5). It implements
+// Redactor matches secret values under active leases. It implements
 // signalcore.Redactor. Matching is Aho–Corasick over raw values plus their
 // base64 and URL-encoded forms; values shorter than 6 bytes are skipped.
 type Redactor struct {
@@ -109,7 +109,7 @@ func (r *Redactor) RedactString(s string) string {
 }
 
 // ContainsSecret reports whether bytes hold any matched secret. Pcap bytes
-// are never rewritten (§6.5); captures containing a match are flagged.
+// are never rewritten; captures containing a match are flagged.
 func (r *Redactor) ContainsSecret(b []byte) bool {
 	r.mu.RLock()
 	ac := r.ac

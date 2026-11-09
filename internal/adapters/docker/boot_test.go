@@ -58,7 +58,7 @@ func TestCheckNeverStartsDocker(t *testing.T) {
 	if err := d.Check(context.Background()); !errors.Is(err, adapter.ErrBackendDown) {
 		t.Fatalf("Check = %v, want ErrBackendDown", err)
 	}
-	// Backend down during recovery observes Unknown, never Absent (§10 #5).
+	// Backend down during recovery observes Unknown, never Absent.
 	obs, err := d.Observe(context.Background(), adapter.OpContext{EnvID: testEnvID}, adapter.Ref{EnvID: testEnvID})
 	if err != nil {
 		t.Fatalf("Observe err = %v", err)

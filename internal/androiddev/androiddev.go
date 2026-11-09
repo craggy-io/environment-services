@@ -169,16 +169,6 @@ func (d *Device) Rooted() bool {
 // RootMode returns the configured root mode.
 func (d *Device) RootMode() envspec.RootMode { return d.cfg.Root }
 
-// Arch returns the guest GOARCH for helper-binary selection.
-func (d *Device) Arch() string {
-	switch d.cfg.ABI {
-	case "arm64-v8a", "arm64":
-		return "arm64"
-	default:
-		return "amd64"
-	}
-}
-
 // Workspace is the guest working directory.
 func (d *Device) Workspace() string { return "/data/local/tmp/work" }
 
@@ -247,10 +237,7 @@ func (d *Device) ExecArgv(ctx context.Context, argv []string, user, dir string, 
 func (d *Device) commandLine(argv []string, user, dir string, env map[string]string) string {
 	var b strings.Builder
 	if dir != "" {
-		if !strings.HasPrefix(dir, "/") {
-			dir = d.Workspace() + "/" + dir
-		}
-		b.WriteString("cd " + adb.Quote([]string{dir}) + " && ")
+		b.WriteString("cd " + adb.Quote([]string{d.guestPath(dir)}) + " && ")
 	}
 	for k, v := range env {
 		b.WriteString(k + "=" + adb.Quote([]string{v}) + " ")

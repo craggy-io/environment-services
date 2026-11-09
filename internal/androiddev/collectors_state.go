@@ -446,22 +446,17 @@ func listRoot(ctx context.Context, e *Device, root string) ([]string, bool, erro
 	if err != nil {
 		return nil, false, fmt.Errorf("find %s: exec: %w", root, err)
 	}
-	stderr := make(chan []byte, 1)
-	go func() {
-		b, _ := readPrefix(proc.Stderr, 4<<10)
-		stderr <- b
-	}()
+	stderr := collectStderr(proc.Stderr)
 	out, rerr := readPrefix(proc.Stdout, MaxStateBytes*4)
 	code, werr := proc.Wait()
-	msg := strings.TrimSpace(string(<-stderr))
-	switch {
-	case werr != nil:
-		return nil, false, withStderr(fmt.Errorf("find %s: wait: %w", root, werr), msg)
-	case code == 3:
+	msg := stderr()
+	if werr == nil && code == 3 {
 		return nil, false, nil
-	case code != 0:
-		return nil, false, withStderr(fmt.Errorf("find %s: exit status %d", root, code), msg)
-	case rerr != nil:
+	}
+	if err := exitStatusError(code, werr, msg); err != nil {
+		return nil, false, fmt.Errorf("find %s: %w", root, err)
+	}
+	if rerr != nil {
 		return nil, false, fmt.Errorf("find %s: read stdout: %w", root, rerr)
 	}
 	var names []string

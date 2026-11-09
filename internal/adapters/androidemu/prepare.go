@@ -123,7 +123,7 @@ func (d *Adapter) ProfilePrepared(p envspec.Profile) error {
 
 // PrepareProfile installs the system image (sdkmanager, progress by
 // stage), creates the base AVD, boots it once to set up root/Frida/CA,
-// and snapshots `clean` (§3.7). Slow parts happen exactly once per variant.
+// and snapshots `clean`. Slow parts happen exactly once per variant.
 func (d *Adapter) PrepareProfile(ctx context.Context, p envspec.Profile, progress func(envspec.Progress)) error {
 	if err := d.Check(ctx); err != nil {
 		return err

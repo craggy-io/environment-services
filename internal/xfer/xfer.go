@@ -1,13 +1,11 @@
 // Package xfer moves file trees between envspec.Source/Sink and
-// environments: streaming tar, manifests, delta sync, and the
-// in-environment helper protocol. It imports envspec only — never
-// storage and never a driver. The in-memory Source/Sink live in envspec
-// (MemSource/MemSink); the delta-sink extensions live here.
+// environments: streaming tar, manifests and delta sync. It imports
+// envspec only — never storage and never a driver. The in-memory
+// Source/Sink live in envspec (MemSource/MemSink); the delta-sink
+// extensions live here.
 package xfer
 
 import (
-	"context"
-	"io"
 	"strconv"
 
 	"github.com/craggy-io/environment-services/envspec"
@@ -44,8 +42,3 @@ type ConcurrentSink interface {
 // entryIsSymlink reports whether e carries the symlink file-type bits
 // (git convention: Mode 0o120000, target as content).
 func entryIsSymlink(e envspec.Entry) bool { return e.Mode&0o170000 == 0o120000 }
-
-// ExecFunc runs argv in an environment with streamed stdio. Core adapts
-// an adapter's exec port to it; returning a wait func avoids importing
-// the lifecycle packages here.
-type ExecFunc func(ctx context.Context, argv []string, stdin io.Reader) (stdout io.Reader, wait func() (int, error), err error)

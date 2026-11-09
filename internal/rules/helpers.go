@@ -10,7 +10,7 @@ import (
 	"go.starlark.net/starlark"
 )
 
-// Go-backed stateful helpers (§8.2): hot-path math never runs in the
+// Go-backed stateful helpers: hot-path math never runs in the
 // interpreter. All take times from the instance clock so backtests on a
 // virtual clock match live runs.
 

@@ -11,7 +11,7 @@ import (
 	"github.com/craggy-io/environment-services/internal/xfer"
 )
 
-// The §5.4 phase-2 benchmark: a synthetic 80,000-file tree through the tar
+// The transfer benchmark: a synthetic 80,000-file tree through the tar
 // pipeline into a ConcurrentSink, plus a 1%-change delta. Run with:
 //
 //	go test ./xfer -run TestXfer80kGate -v
@@ -48,7 +48,7 @@ func TestXfer80kGate(t *testing.T) {
 		t.Fatalf("push files = %d", st.Files)
 	}
 	if pushElapsed > 30*time.Second {
-		t.Fatalf("§5.4 gate: full push took %s (>30s)", pushElapsed)
+		t.Fatalf("gate: full push took %s (>30s)", pushElapsed)
 	}
 
 	t0 = time.Now()
@@ -63,7 +63,7 @@ func TestXfer80kGate(t *testing.T) {
 		t.Fatalf("pulled %d files", len(sink.Files))
 	}
 	if pullElapsed > 60*time.Second {
-		t.Fatalf("§5.4 gate: full pull took %s (>60s)", pullElapsed)
+		t.Fatalf("gate: full pull took %s (>60s)", pullElapsed)
 	}
 
 	// Delta with 1% changed.

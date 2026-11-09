@@ -14,9 +14,9 @@ import (
 )
 
 // TestManagerMethodSet pins Manager's exported method set to the
-// execution plan §3.2 list (with ProfileStatus, the authoritative
+// documented public list (with ProfileStatus, the authoritative
 // readiness answer; without Warnings — there is no legacy to warn
-// about). Adding or removing a Manager method must update the plan
+// about). Adding or removing a Manager method must update this list
 // and this list together.
 func TestManagerMethodSet(t *testing.T) {
 	want := []string{

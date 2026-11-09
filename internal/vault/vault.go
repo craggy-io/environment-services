@@ -1,6 +1,6 @@
 // Package vault holds environment test credentials behind leases and
-// declarative policy (design §6). It is mutable, plaintext (test accounts,
-// D6) and independent of env. Agents use credentials by reference and never
+// declarative policy. It is mutable, plaintext (test accounts
+// only) and independent of env. Agents use credentials by reference and never
 // see values: Secret redacts itself in every formatting path.
 package vault
 
@@ -35,7 +35,7 @@ func (s Secret) MarshalText() ([]byte, error) { return []byte("[redacted]"), nil
 // library (Lease.Use callbacks); agent-facing code must never call it.
 func (s Secret) Reveal() string { return s.v }
 
-// Policy is declarative and checked in the lease transaction (§6.2).
+// Policy is declarative and checked in the lease transaction.
 type Policy struct {
 	MaxConcurrent int           `json:"max_concurrent,omitempty"` // 1 = exclusive; 0 = unlimited
 	Cooldown      time.Duration `json:"cooldown,omitempty"`
@@ -195,7 +195,7 @@ func (v *Vault) Put(c Credential) (Credential, error) {
 	return c, nil
 }
 
-// Delete really deletes a credential (the vault is mutable, §6).
+// Delete really deletes a credential (the vault is mutable).
 func (v *Vault) Delete(id string) error {
 	tx, err := v.db.Begin()
 	if err != nil {

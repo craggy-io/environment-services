@@ -390,6 +390,5 @@ var (
 	_ adapter.Manifestor        = (*Instance)(nil)
 	_ adapter.FSLister          = (*Instance)(nil)
 	_ adapter.CredInjector      = (*Instance)(nil)
-	_ adapter.Arched            = (*Instance)(nil)
 	_ adapter.CollectorProvider = (*Instance)(nil)
 )

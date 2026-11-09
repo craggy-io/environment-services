@@ -17,7 +17,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-// RecorderConfig tunes the recorder ring and spill (§7.4).
+// RecorderConfig tunes the recorder ring and spill.
 type RecorderConfig struct {
 	Dir        string        // segment root; empty = memory only
 	RingWindow time.Duration // default 15m

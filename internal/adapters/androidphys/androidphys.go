@@ -16,6 +16,7 @@ package androidphys
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -404,8 +405,15 @@ func (i *Instance) Exec(ctx context.Context, op adapter.OpContext, cmd adapter.E
 	return i.dev.ExecProcess(ctx, cmd)
 }
 
-// Arch implements adapter.Arched.
-func (i *Instance) Arch() string { return i.dev.Arch() }
+// PutArchive implements adapter.Transferrer (tar over adb).
+func (i *Instance) PutArchive(ctx context.Context, op adapter.OpContext, dst string, tarStream io.Reader) error {
+	return i.dev.PutArchive(ctx, dst, tarStream)
+}
+
+// GetArchive implements adapter.Transferrer (tar over adb).
+func (i *Instance) GetArchive(ctx context.Context, op adapter.OpContext, src string) (io.ReadCloser, error) {
+	return i.dev.GetArchive(ctx, src)
+}
 
 // Collectors implements adapter.CollectorProvider.
 func (i *Instance) Collectors() []signalcore.Collector { return i.dev.Collectors() }
@@ -448,9 +456,9 @@ var (
 	_ adapter.Coster            = (*Adapter)(nil)
 	_ adapter.ComponentWatcher  = (*Adapter)(nil)
 	_ adapter.Instance          = (*Instance)(nil)
+	_ adapter.Transferrer       = (*Instance)(nil)
 	_ adapter.Executor          = (*Instance)(nil)
 	_ adapter.CredInjector      = (*Instance)(nil)
-	_ adapter.Arched            = (*Instance)(nil)
 	_ adapter.CollectorProvider = (*Instance)(nil)
 	_ adapter.ProbeProvider     = (*Instance)(nil)
 	_ adapter.ComponentReporter = (*Instance)(nil)

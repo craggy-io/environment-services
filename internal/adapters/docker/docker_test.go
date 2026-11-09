@@ -83,7 +83,7 @@ func TestObservePresenceMapping(t *testing.T) {
 	ctx := context.Background()
 	op := adapter.OpContext{EnvID: testEnvID}
 
-	// Nothing created: definitive 404 -> Absent (gate §10 #5 counterpart).
+	// Nothing created: definitive 404 -> Absent.
 	obs, err := a.Observe(ctx, op, adapter.Ref{EnvID: testEnvID})
 	if err != nil || obs.Presence != adapter.Absent {
 		t.Fatalf("missing container: presence=%s err=%v, want Absent", obs.Presence, err)
@@ -100,13 +100,13 @@ func TestObservePresenceMapping(t *testing.T) {
 	if obs.Image != "sha256:busyboxid" {
 		t.Errorf("image = %q", obs.Image)
 	}
-	// By deterministic name only (crash before tx2 recorded the ID, §10 #3).
+	// By deterministic name only (crash before tx2 recorded the ID).
 	obs, err = a.Observe(ctx, op, adapter.Ref{EnvID: testEnvID, Name: adapter.NameFor(testEnvID)})
 	if err != nil || obs.Presence != adapter.Present || obs.Ref.External != inst.Ref().External {
 		t.Fatalf("by name: %+v %v", obs, err)
 	}
 
-	// Backend down: Unknown, never Absent (§10 #5), and Open fails.
+	// Backend down: Unknown, never Absent, and Open fails.
 	f.down = true
 	obs, err = a.Observe(ctx, op, inst.Ref())
 	if obs.Presence != adapter.Unknown {
@@ -152,7 +152,7 @@ func TestDisposeRemovesContainerSidecarsAndNetwork(t *testing.T) {
 	}
 	obs, _ := a.Observe(ctx, op, inst.Ref())
 	if obs.Presence != adapter.Absent {
-		t.Fatalf("after destroy: presence=%s, want Absent (release verify, §10 #6)", obs.Presence)
+		t.Fatalf("after destroy: presence=%s, want Absent (release verify)", obs.Presence)
 	}
 	if len(f.containers) != 0 {
 		t.Fatalf("containers left: %d", len(f.containers))
@@ -177,7 +177,7 @@ func TestDestroyFailureSurfacesForRetry(t *testing.T) {
 	f.removeErr = errors.New("container is restarting")
 	err = inst.Dispose(ctx, op, adapter.Destroy)
 	if err == nil {
-		t.Fatal("failed destroy must return an error so the release op stays pending (§10 #6)")
+		t.Fatal("failed destroy must return an error so the release op stays pending")
 	}
 	obs, _ := a.Observe(ctx, op, inst.Ref())
 	if obs.Presence != adapter.Present {

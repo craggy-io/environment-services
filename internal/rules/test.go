@@ -11,7 +11,7 @@ import (
 )
 
 // TestResult is a backtest outcome: emits and triggers on a virtual clock,
-// nothing published (§8.3).
+// nothing published.
 type TestResult struct {
 	Rule     string                `json:"rule"`
 	Version  int                   `json:"version"`

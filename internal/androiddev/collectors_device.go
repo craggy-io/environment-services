@@ -111,7 +111,7 @@ func (l *logcatCollector) Run(ctx context.Context, params json.RawMessage, out s
 		Filter string `json:"filter"`
 	}
 	_ = json.Unmarshal(params, &p)
-	// Device→host clock offset for timestamps (§7.4).
+	// Device→host clock offset for timestamps.
 	offset := sampleClockOffset(ctx, e)
 	client, serial := e.tr, e.cfg.Serial
 	args := "logcat -B"
@@ -717,20 +717,13 @@ func guestOutput(ctx context.Context, e *Device, c guestCmd, max int) ([]byte, b
 	if err != nil {
 		return nil, false, fmt.Errorf("exec: %w", err)
 	}
-	stderr := make(chan []byte, 1)
-	go func() {
-		b, _ := readPrefix(proc.Stderr, 4<<10)
-		stderr <- b
-	}()
+	stderr := collectStderr(proc.Stderr)
 	out, rerr := readPrefix(proc.Stdout, max+1)
 	code, werr := proc.Wait()
-	msg := strings.TrimSpace(string(<-stderr))
-	switch {
-	case werr != nil:
-		return nil, false, withStderr(fmt.Errorf("wait: %w", werr), msg)
-	case code != 0:
-		return nil, false, withStderr(fmt.Errorf("exit status %d", code), msg)
-	case rerr != nil:
+	if err := exitStatusError(code, werr, stderr()); err != nil {
+		return nil, false, err
+	}
+	if rerr != nil {
 		return nil, false, fmt.Errorf("read stdout: %w", rerr)
 	}
 	if len(out) > max {
@@ -753,6 +746,29 @@ func readPrefix(r io.Reader, max int) ([]byte, error) {
 	return b, err
 }
 
+// collectStderr drains r in the background, keeping its first 4 KiB;
+// the returned func waits for the drain and yields the trimmed text.
+func collectStderr(r io.Reader) func() string {
+	ch := make(chan []byte, 1)
+	go func() {
+		b, _ := readPrefix(r, 4<<10)
+		ch <- b
+	}()
+	return func() string { return strings.TrimSpace(string(<-ch)) }
+}
+
+// exitStatusError is nil for a clean exit; otherwise it names the wait
+// failure or the non-zero exit status, carrying stderr.
+func exitStatusError(code int, werr error, stderr string) error {
+	switch {
+	case werr != nil:
+		return withStderr(fmt.Errorf("wait: %w", werr), stderr)
+	case code != 0:
+		return withStderr(fmt.Errorf("exit status %d", code), stderr)
+	}
+	return nil
+}
+
 func withStderr(err error, stderr string) error {
 	if stderr == "" {
 		return err
@@ -761,7 +777,7 @@ func withStderr(err error, stderr string) error {
 }
 
 // sampleAndroidResources: qemu numbers come from host metrics; the guest
-// side is `top -b -n1` excerpt (§7.2).
+// side is `top -b -n1` excerpt.
 func sampleAndroidResources(ctx context.Context, e *Device) (envspec.ResourcesData, error) {
 	b, _, err := guestOutput(ctx, e, guestCmd{Argv: []string{"top", "-b", "-n", "1", "-m", "5"}}, 16<<10)
 	if err != nil {

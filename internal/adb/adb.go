@@ -1,5 +1,5 @@
 // Package adb is a small client for the adb server protocol (port 5037),
-// so the driver never spawns adb.exe per call (design §3.7, D8). It
+// so the driver never spawns adb.exe per call. It
 // implements host queries, host:transport, shell protocol v2 (separate
 // stdout/stderr plus exit code), exec: for binary-safe streams, and sync:
 // for single files.

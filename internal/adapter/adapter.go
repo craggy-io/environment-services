@@ -230,8 +230,9 @@ type ExecCmd struct {
 	Timeout time.Duration
 }
 
-// Transferrer is the fast archive transfer path (docker archive API,
-// host local tar).
+// Transferrer moves file trees as tar (docker archive API, host local
+// tar, device tar over adb). GetArchive entries are relative to src; its
+// Close reports a source that failed after streaming began.
 type Transferrer interface {
 	PutArchive(ctx context.Context, op OpContext, dst string, tar io.Reader) error
 	GetArchive(ctx context.Context, op OpContext, src string) (io.ReadCloser, error)
@@ -296,9 +297,6 @@ type FSLister interface {
 type Manifestor interface {
 	Manifest(ctx context.Context, op OpContext, root string) ([]envspec.Entry, error)
 }
-
-// Arched reports the guest GOARCH for helper-binary selection.
-type Arched interface{ Arch() string }
 
 // CollectorProvider exposes the collectors this instance's adapter owns,
 // already bound to typed ports. Core's activity reconciler runs them.

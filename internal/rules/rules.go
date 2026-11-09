@@ -154,7 +154,7 @@ type InstanceInfo struct {
 }
 
 // Load parses, checks and activates a rule. A failed load leaves any
-// running instance of the same rule untouched (hot reload, §8.3): the swap
+// running instance of the same rule untouched (hot reload): the swap
 // happens only after subscriptions resolve. A new version starts fresh.
 func (e *Engine) Load(ctx context.Context, src []byte, codeRef string, params map[string]any) (InstanceID, error) {
 	decl, globals, err := e.compile(src, params, time.Now)

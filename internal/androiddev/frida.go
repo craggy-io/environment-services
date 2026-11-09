@@ -40,7 +40,7 @@ type FridaServer struct {
 	mu sync.Mutex // serializes downloads
 }
 
-// fridaName picks a randomised on-device binary name (§3.9 options).
+// fridaName picks a randomised on-device binary name.
 func fridaName(o *envspec.FridaOptions, avd string) string {
 	if o != nil && o.Name != "" {
 		return o.Name

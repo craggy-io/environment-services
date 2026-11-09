@@ -12,7 +12,7 @@ import (
 )
 
 // On Unix the "job" is a process group (cgroup limits are deployment
-// concerns; lifecycle parity is what the driver needs, §3.8).
+// concerns; lifecycle parity is what the driver needs).
 type job struct {
 	name string
 	pgid int

@@ -35,7 +35,7 @@ func (l *Lease) Public() map[string]string {
 func (l *Lease) Kind() string { return l.cred.Kind }
 
 // Use hands one secret field to fn, in-process only. It is the only way to
-// touch a value (§6.3).
+// touch a value.
 func (l *Lease) Use(field string, fn func(Secret) error) error {
 	if l.released {
 		return ErrReleased
@@ -169,7 +169,7 @@ func (v *Vault) LeaseByID(ctx context.Context, leaseID string) (*Lease, error) {
 
 // Lease grants a credential lease. Policy is checked inside the same
 // transaction that grants it, so two environments racing for the same
-// account can't both win (§6.2). Selector requests skip denied
+// account can't both win. Selector requests skip denied
 // credentials and pick the least-recently-used that passes every rule.
 func (v *Vault) Lease(ctx context.Context, r LeaseRequest) (*Lease, error) {
 	v.mu.Lock()

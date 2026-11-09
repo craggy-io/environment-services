@@ -12,7 +12,7 @@ import (
 )
 
 // job is a named Windows Job Object, not kill-on-close, so processes
-// outlive the manager (rule 9) and Adopt can reopen it by name (§3.8).
+// outlive the manager (rule 9) and Adopt can reopen it by name.
 type job struct {
 	h    windows.Handle
 	name string
@@ -119,7 +119,7 @@ func (j *job) accounting() (cpuTime time.Duration, procs uint32, err error) {
 }
 
 // processCreationTime returns a PID's creation time; PID reuse is detected
-// by comparing it with the recorded value (§3.8).
+// by comparing it with the recorded value.
 func processCreationTime(pid int) (time.Time, bool) {
 	ph, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {

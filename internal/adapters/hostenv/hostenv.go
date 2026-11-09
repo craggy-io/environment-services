@@ -331,9 +331,6 @@ func (i *Instance) Ref() adapter.Ref {
 // and tests); never surfaced to callers.
 func (i *Instance) LocalWorkspace() string { return i.workspace }
 
-// Arch reports the guest GOARCH: the host's own (adapter.Arched).
-func (i *Instance) Arch() string { return runtime.GOARCH }
-
 func (i *Instance) saveState() error {
 	i.mu.Lock()
 	st := instanceState{Env: i.envID, JobName: i.job.name, Workspace: i.workspace, Spec: i.spec, Procs: i.procs}

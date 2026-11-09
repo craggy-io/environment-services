@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="820" viewBox="0 0 1440 820" role="img" aria-labelledby="title desc">
+  <title id="title">Environment Services architecture</title>
+  <desc id="desc">Applications use the environments manager and envcap registry capabilities over the stdlib-only envspec contracts. Environments assembles a durable lifecycle core, observation services, and runtime adapters for host processes, Docker containers, Android emulators, and attached physical Android devices. Leased Playwright MCP and agent-browser sessions run as managed services in Docker.</desc>
+  <style>
+    :root { color-scheme: dark light; }
+    .bg { fill: #111a20; }
+    .card { fill: #16222a; stroke: #4a3f2c; stroke-width: 1.5; }
+    .band { fill: #202b30; stroke: #6d5936; stroke-width: 1.5; }
+    .text { fill: #e4ece7; }
+    .muted { fill: #aab9b3; }
+    .accent { fill: #ffb547; }
+    .line { stroke: #ffb547; fill: none; stroke-width: 2; }
+    .rule { stroke: #43504f; stroke-width: 2; }
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #f7f8f4; }
+      .card { fill: #ffffff; stroke: #c9b38e; }
+      .band { fill: #f0eee6; stroke: #b79a6d; }
+      .text { fill: #1d2b35; }
+      .muted { fill: #445761; }
+      .accent { fill: #8c4a00; }
+      .line { stroke: #a45c08; }
+      .rule { stroke: #c9d0cd; }
+    }
+    text { font-family: 'JetBrains Mono', Consolas, 'Liberation Mono', monospace; }
+    .title { font-size: 29px; font-weight: 700; }
+    .subtitle { font-size: 19px; }
+    .section { font-size: 17px; font-weight: 700; }
+    .name { font-size: 25px; font-weight: 700; }
+    .detail { font-size: 17px; }
+    .tiny { font-size: 15px; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1 L9 5 L1 9" fill="none" stroke="#a87427" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1440" height="820" rx="20"/>
+  <text class="accent title" x="40" y="56">&gt; ENVIRONMENT SERVICES</text>
+  <text class="text subtitle" x="40" y="89">One durable lifecycle, four runtime adapters</text>
+  <text class="muted tiny" x="1400" y="55" text-anchor="end">PACKAGE + RUNTIME MAP</text>
+  <path class="rule" d="M40 111 H1400"/>
+
+  <text class="accent section" x="40" y="177">01 / CONSUMERS</text>
+  <text class="muted tiny" x="40" y="204">Host decides access</text>
+  <rect class="card" x="270" y="140" width="1130" height="88" rx="12"/>
+  <path class="line" d="M292 160 H326" stroke-width="3"/>
+  <text class="text name" x="292" y="192">Applications and agents</text>
+  <text class="muted detail" x="835" y="191">Ownership / policy / evidence retention</text>
+  <path class="line" d="M1090 229 V260" marker-end="url(#arrow)"/>
+
+  <text class="accent section" x="40" y="312">02 / PUBLIC API</text>
+  <text class="muted tiny" x="40" y="339">Three production packages</text>
+  <rect class="card" x="270" y="275" width="260" height="122" rx="12"/>
+  <path class="line" d="M292 295 H326" stroke-width="3"/>
+  <text class="text name" x="292" y="328">envspec</text>
+  <text class="muted detail" x="292" y="359">Contracts + records</text>
+  <text class="muted tiny" x="292" y="382">stdlib only</text>
+  <rect class="card" x="550" y="275" width="300" height="122" rx="12"/>
+  <path class="line" d="M572 295 H606" stroke-width="3"/>
+  <text class="text name" x="572" y="328">envcap</text>
+  <text class="muted detail" x="572" y="359">Registry capabilities</text>
+  <text class="muted tiny" x="572" y="382">Stage / Keep port</text>
+  <rect class="card" x="870" y="275" width="530" height="122" rx="12"/>
+  <path class="line" d="M892 295 H926" stroke-width="3"/>
+  <text class="text name" x="892" y="328">environments</text>
+  <text class="muted detail" x="892" y="359">Open + Manager / assembly root</text>
+  <text class="muted tiny" x="892" y="382">Managed services + leased browser API</text>
+  <path class="line" d="M870 336 H853" marker-end="url(#arrow)"/>
+  <path class="line" d="M550 336 H533" marker-end="url(#arrow)"/>
+  <path class="line" d="M1100 399 V429" marker-end="url(#arrow)"/>
+
+  <text class="accent section" x="40" y="492">03 / INTERNAL</text>
+  <text class="muted tiny" x="40" y="519">Assembled by Manager</text>
+  <rect class="card" x="270" y="445" width="520" height="141" rx="12"/>
+  <path class="line" d="M292 465 H326" stroke-width="3"/>
+  <text class="text name" x="292" y="498">core + store</text>
+  <text class="muted detail" x="292" y="531">Leases / admission / operations</text>
+  <text class="muted detail" x="292" y="559">Readiness / cleanup / services</text>
+  <rect class="band" x="810" y="445" width="590" height="141" rx="12"/>
+  <path class="line" d="M832 465 H866" stroke-width="3"/>
+  <text class="text name" x="832" y="498">Observation + support</text>
+  <text class="muted detail" x="832" y="531">signalcore / rules / vault</text>
+  <text class="muted detail" x="832" y="559">hostmon / xfer / androiddev</text>
+  <path class="line" d="M530 588 V615 M403 615 H1265"/>
+  <path class="line" d="M403 615 V632" marker-end="url(#arrow)"/>
+  <path class="line" d="M690 615 V632" marker-end="url(#arrow)"/>
+  <path class="line" d="M977 615 V632" marker-end="url(#arrow)"/>
+  <path class="line" d="M1265 615 V632" marker-end="url(#arrow)"/>
+
+  <text class="accent section" x="40" y="675">04 / RUNTIMES</text>
+  <text class="muted tiny" x="40" y="702">Adapter-owned mechanics</text>
+  <rect class="card" x="270" y="635" width="267" height="116" rx="12"/>
+  <path class="line" d="M292 655 H326" stroke-width="3"/>
+  <text class="text name" x="292" y="686">hostenv</text>
+  <text class="muted detail" x="292" y="717">Host processes</text>
+  <rect class="card" x="557" y="635" width="267" height="116" rx="12"/>
+  <path class="line" d="M579 655 H613" stroke-width="3"/>
+  <text class="text name" x="579" y="686">docker</text>
+  <text class="muted detail" x="579" y="717">Containers + browsers</text>
+  <rect class="card" x="844" y="635" width="267" height="116" rx="12"/>
+  <path class="line" d="M866 655 H900" stroke-width="3"/>
+  <text class="text name" x="866" y="686">androidemu</text>
+  <text class="muted detail" x="866" y="717">Emulator lifecycle</text>
+  <rect class="card" x="1131" y="635" width="269" height="116" rx="12"/>
+  <path class="line" d="M1153 655 H1187" stroke-width="3"/>
+  <text class="text name" x="1153" y="686">androidphys</text>
+  <text class="muted detail" x="1153" y="717">Attach / disconnect</text>
+  <path class="rule" d="M40 781 H1400"/>
+  <text class="muted tiny" x="40" y="806">envtest is test-only; browser backends are Playwright MCP and agent-browser, selected per private service lease.</text>
+</svg>

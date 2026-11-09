@@ -236,52 +236,39 @@ func (m *Manager) ExecStream(ctx context.Context, h Handle, cmd adapter.ExecCmd)
 	return m.execProcess(ctx, e, r, cmd)
 }
 
-// push moves a Source tree into an env: archive fast path when the
-// instance is a Transferrer, else the xfer helper protocol over exec.
+// push moves a Source tree into an env through the instance's archive
+// transfer port (docker archive API, host tar, tar over adb).
 func (m *Manager) push(ctx context.Context, e store.Env, r *runtimeEnv, src envspec.Source, dst string, o xfer.Options) (envspec.TransferStats, error) {
+	tr, err := requireTransferrer(e, r)
+	if err != nil {
+		return envspec.TransferStats{}, err
+	}
 	oc := adapter.OpContext{EnvID: e.ID, Generation: e.Generation}
 	opCtx, done := r.operationContext(ctx)
 	defer done()
 	if o.Delta {
-		if st, err, handled := m.deltaPush(opCtx, e, r, src, dst, o); handled {
+		if st, err, handled := m.deltaPush(opCtx, e, r, tr, src, dst, o); handled {
 			return st, operationError(opCtx, err)
 		}
 	}
-	if tr, ok := r.inst.(adapter.Transferrer); ok {
-		pr, pw := io.Pipe()
-		errCh := make(chan error, 1)
-		var st envspec.TransferStats
-		go func() {
-			var err error
-			st, err = xfer.WriteTar(opCtx, src, pw, o)
-			_ = pw.CloseWithError(err)
-			errCh <- err
-		}()
-		err := tr.PutArchive(opCtx, oc, dst, pr)
-		_ = pr.CloseWithError(err)
-		if werr := <-errCh; err == nil {
-			err = werr
-		}
-		return st, operationError(opCtx, err)
+	pr, pw := io.Pipe()
+	errCh := make(chan error, 1)
+	var st envspec.TransferStats
+	go func() {
+		var err error
+		st, err = xfer.WriteTar(opCtx, src, pw, o)
+		_ = pw.CloseWithError(err)
+		errCh <- err
+	}()
+	err = tr.PutArchive(opCtx, oc, dst, pr)
+	_ = pr.CloseWithError(err)
+	if werr := <-errCh; err == nil {
+		err = werr
 	}
-	execFn, err := m.agentExec(e, r)
-	if err != nil {
-		return envspec.TransferStats{}, err
-	}
-	argv, err := m.agentArgv(ctx, e, r)
-	if err != nil {
-		return envspec.TransferStats{}, err
-	}
-	var buf bytes.Buffer
-	st, err := xfer.WriteTar(opCtx, src, &buf, o)
-	if err != nil {
-		return st, err
-	}
-	err = xfer.AgentRecv(opCtx, execFn, argv, dst, o.Mirror, &buf)
 	return st, operationError(opCtx, err)
 }
 
-func (m *Manager) deltaPush(ctx context.Context, e store.Env, r *runtimeEnv, src envspec.Source, dst string, o xfer.Options) (envspec.TransferStats, error, bool) {
+func (m *Manager) deltaPush(ctx context.Context, e store.Env, r *runtimeEnv, tr adapter.Transferrer, src envspec.Source, dst string, o xfer.Options) (envspec.TransferStats, error, bool) {
 	oc := adapter.OpContext{EnvID: e.ID, Generation: e.Generation}
 	dstMan, err, ok := m.manifestOf(ctx, e, r, dst)
 	if !ok {
@@ -295,10 +282,6 @@ func (m *Manager) deltaPush(ctx context.Context, e store.Env, r *runtimeEnv, src
 		return envspec.TransferStats{}, err, true
 	}
 	send, del := xfer.Diff(srcMan, dstMan, o.Mirror)
-	tr, isTr := r.inst.(adapter.Transferrer)
-	if !isTr {
-		return envspec.TransferStats{}, nil, false
-	}
 	only := map[string]bool{}
 	for _, e2 := range send {
 		only[e2.Path] = true
@@ -337,70 +320,32 @@ func writeDeleteList(w io.Writer, del []string) error {
 
 // pull reads a tree out of an env into a Sink.
 func (m *Manager) pull(ctx context.Context, e store.Env, r *runtimeEnv, src string, dst envspec.Sink, o xfer.Options) (envspec.TransferStats, error) {
+	tr, err := requireTransferrer(e, r)
+	if err != nil {
+		return envspec.TransferStats{}, err
+	}
 	oc := adapter.OpContext{EnvID: e.ID, Generation: e.Generation}
 	opCtx, done := r.operationContext(ctx)
 	defer done()
-	if tr, ok := r.inst.(adapter.Transferrer); ok {
-		rc, err := tr.GetArchive(opCtx, oc, src)
-		if err != nil {
-			return envspec.TransferStats{}, operationError(opCtx, err)
-		}
-		defer rc.Close()
-		st, err := xfer.ReadTar(opCtx, rc, dst, o)
-		return st, operationError(opCtx, err)
-	}
-	execFn, err := m.agentExec(e, r)
-	if err != nil {
-		return envspec.TransferStats{}, err
-	}
-	argv, err := m.agentArgv(ctx, e, r)
-	if err != nil {
-		return envspec.TransferStats{}, err
-	}
-	rd, wait, err := xfer.AgentSend(opCtx, execFn, argv, src, nil)
+	rc, err := tr.GetArchive(opCtx, oc, src)
 	if err != nil {
 		return envspec.TransferStats{}, operationError(opCtx, err)
 	}
-	st, rerr := xfer.ReadTar(opCtx, rd, dst, o)
-	code, werr := wait()
-	if rerr == nil && werr == nil && code != 0 {
-		rerr = fmt.Errorf("agent send exited %d", code)
+	st, err := xfer.ReadTar(opCtx, rc, dst, o)
+	if cerr := rc.Close(); err == nil {
+		err = cerr
 	}
-	if rerr == nil {
-		rerr = werr
-	}
-	return st, operationError(opCtx, rerr)
+	return st, operationError(opCtx, err)
 }
 
-// agentExec adapts instance exec to xfer's ExecFunc. Agent *deployment*
-// (pushing the helper binary) is the owning adapter's concern in later
-// stages; argv resolution here is the conventional helper path.
-func (m *Manager) agentExec(e store.Env, r *runtimeEnv) (xfer.ExecFunc, error) {
-	ex, ok := r.inst.(adapter.Executor)
+// requireTransferrer returns the instance's archive port, or
+// ErrUnsupported when its runtime has no file transfer.
+func requireTransferrer(e store.Env, r *runtimeEnv) (adapter.Transferrer, error) {
+	tr, ok := r.inst.(adapter.Transferrer)
 	if !ok {
 		return nil, fmt.Errorf("%w: transfer on %s", adapter.ErrUnsupported, e.Kind)
 	}
-	oc := adapter.OpContext{EnvID: e.ID, Generation: e.Generation}
-	return func(ctx context.Context, argv []string, stdin io.Reader) (io.Reader, func() (int, error), error) {
-		p, err := ex.Exec(ctx, oc, adapter.ExecCmd{Argv: argv, Stdin: stdin})
-		if err != nil {
-			return nil, nil, err
-		}
-		return p.Stdout, p.Wait, nil
-	}, nil
-}
-
-func (m *Manager) agentArgv(ctx context.Context, e store.Env, r *runtimeEnv) ([]string, error) {
-	arch := "amd64"
-	if a, ok := r.inst.(adapter.Arched); ok && a.Arch() != "" {
-		arch = a.Arch()
-	}
-	if _, ok := xfer.AgentBinary(arch); !ok {
-		return nil, fmt.Errorf("%w: no transfer helper for arch %s", adapter.ErrUnsupported, arch)
-	}
-	// Conventional helper location; adapters that need the agent path
-	// deploy it there during Create (see adapter stages).
-	return []string{"/tmp/craggy-xfer"}, nil
+	return tr, nil
 }
 
 // manifestOf returns a tree manifest via the instance fast path.

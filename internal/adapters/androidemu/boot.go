@@ -280,7 +280,7 @@ func (d *Adapter) waitBootCompleted(ctx context.Context, inst *Instance, deviceT
 	for time.Now().Before(deadline) {
 		out, _, err := d.transport().Run(ctx, inst.serial, "getprop sys.boot_completed")
 		if err == nil && strings.TrimSpace(out) == "1" {
-			// Package manager answering is part of ready (§3.7).
+			// Package manager answering is part of ready.
 			if _, code, err := d.transport().Run(ctx, inst.serial, "pm list packages -f 2>/dev/null | head -1"); err == nil && code == 0 {
 				return nil
 			}
@@ -353,7 +353,7 @@ func (d *Adapter) Create(ctx context.Context, op adapter.OpContext, s envspec.Sp
 	for _, name := range []string{"adb", "root", "frida", "proxy-ca"} {
 		if err := inst.EnsureComponent(ctx, name); err != nil {
 			// Recorded in component state; ready is not blocked on
-			// optional instruments (§3.9 degraded semantics).
+			// optional instruments (degraded semantics).
 			_ = err
 		}
 	}

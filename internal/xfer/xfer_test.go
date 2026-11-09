@@ -7,7 +7,6 @@ import (
 	"io"
 	"iter"
 	"os"
-	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -162,95 +161,7 @@ func TestDirSourceSinkAndDigestSink(t *testing.T) {
 	}
 }
 
-// TestAgentProtocol builds the real craggy-xfer binary for this platform and
-// drives manifest/recv/send through the client.
-func TestAgentProtocol(t *testing.T) {
-	ctx := context.Background()
-	bin := filepath.Join(t.TempDir(), "craggy-xfer-test.exe")
-	build := osexec.Command("go", "build", "-o", bin, "github.com/craggy-io/environment-services/cmd/xfer-agent")
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Skipf("cannot build agent: %v\n%s", err, out)
-	}
-	execFn := func(ctx context.Context, argv []string, stdin io.Reader) (io.Reader, func() (int, error), error) {
-		cmd := osexec.CommandContext(ctx, bin, argv[1:]...)
-		if stdin != nil {
-			cmd.Stdin = stdin
-		}
-		out, err := cmd.StdoutPipe()
-		if err != nil {
-			return nil, nil, err
-		}
-		if err := cmd.Start(); err != nil {
-			return nil, nil, err
-		}
-		return out, func() (int, error) {
-			err := cmd.Wait()
-			return cmd.ProcessState.ExitCode(), err
-		}, nil
-	}
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "f1.txt"), []byte("one"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	man, err := xfer.AgentManifest(ctx, execFn, []string{bin}, root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(man) != 1 || man[0].Path != "f1.txt" || man[0].Digest == "" {
-		t.Fatalf("manifest = %+v", man)
-	}
-	// recv a new file, manifest again, send it back.
-	var tarBuf bytes.Buffer
-	if _, err := xfer.WriteTar(ctx, envspec.MemSource(map[string][]byte{"sub/f2.txt": []byte("two")}), &tarBuf, xfer.Options{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := xfer.AgentRecv(ctx, execFn, []string{bin}, root, false, &tarBuf); err != nil {
-		t.Fatal(err)
-	}
-	r, wait, err := xfer.AgentSend(ctx, execFn, []string{bin}, root, []string{"sub/f2.txt"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sink := envspec.NewMemSink()
-	if _, err := xfer.ReadTar(ctx, r, sink, xfer.Options{}); err != nil {
-		t.Fatal(err)
-	}
-	if code, err := wait(); err != nil || code != 0 {
-		t.Fatalf("agent send wait = %d %v", code, err)
-	}
-	if string(sink.Files["sub/f2.txt"]) != "two" {
-		t.Fatalf("send payload = %v", sink.Files)
-	}
-	// recv with delete list.
-	if err := os.WriteFile(filepath.Join(root, "stale.txt"), []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	var delBuf bytes.Buffer
-	delSrc := envspec.MemSource(map[string][]byte{xfer.DeleteListName: []byte("stale.txt\n")})
-	if _, err := xfer.WriteTar(ctx, delSrc, &delBuf, xfer.Options{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := xfer.AgentRecv(ctx, execFn, []string{bin}, root, true, &delBuf); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(root, "stale.txt")); !os.IsNotExist(err) {
-		t.Fatalf("stale.txt should be deleted, stat err = %v", err)
-	}
-}
-
-func TestEmbeddedAgentPresent(t *testing.T) {
-	for _, arch := range []string{"amd64", "arm64"} {
-		b, ok := xfer.AgentBinary(arch)
-		if !ok || len(b) < 1<<20 {
-			t.Fatalf("embedded agent for %s missing or tiny (ok=%v len=%d)", arch, ok, len(b))
-		}
-		if _, ok := xfer.AgentDigest(arch); !ok {
-			t.Fatalf("digest missing for %s", arch)
-		}
-	}
-}
-
-// Benchmark-sized tree transfer through tar (scaled: the §5.4 gate's full
+// Benchmark-sized tree transfer through tar (scaled: the gate's full
 // 80k run lives in BenchmarkXfer80k; this asserts correctness at 2k files).
 func TestTarManyFiles(t *testing.T) {
 	ctx := context.Background()

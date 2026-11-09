@@ -651,9 +651,6 @@ func (i *Instance) makeTar(root string, only []string) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-// Arch implements adapter.Arched.
-func (i *Instance) Arch() string { return "amd64" }
-
 // Probes implements adapter.ProbeProvider when Created.Probe is set.
 func (i *Instance) Probes() []adapter.Probe {
 	if i.a == nil || i.a.Probe == nil {
@@ -860,15 +857,6 @@ func (i *Instance) Exec(ctx context.Context, op adapter.OpContext, c adapter.Exe
 	case "id":
 		return finished("uid=0(root) gid=0(root)\n", "", 0), nil
 	default:
-		if len(args) >= 3 && args[1] == "manifest" {
-			man, _ := i.Manifest(ctx, op, args[2])
-			var b strings.Builder
-			for _, e := range man {
-				b.WriteString(xfer.FormatEntry(e) + "\n")
-			}
-			b.WriteString(".\n")
-			return finished(b.String(), "", 0), nil
-		}
 		return finished("", "fake: unknown command "+args[0]+"\n", 127), nil
 	}
 }

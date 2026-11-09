@@ -154,8 +154,8 @@ func TestAttachDetectsPhysicalABI(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := inst.(*Instance)
-	if got.spec.Android.ABI != "arm64-v8a" || got.Arch() != "arm64" {
-		t.Fatalf("physical ABI not propagated: spec=%q arch=%q", got.spec.Android.ABI, got.Arch())
+	if got.spec.Android.ABI != "arm64-v8a" {
+		t.Fatalf("physical ABI not propagated: spec=%q", got.spec.Android.ABI)
 	}
 }
 

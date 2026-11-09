@@ -3,7 +3,7 @@ package rules_test
 // Stage S7 regressions for the script-services move: state mutation
 // across events, the 1M/250ms budget fault, load() rejection, int
 // preservation through values.FromGo/ToGo, and values.ToGo int64 in
-// signal Where matching (execution plan §6, R5).
+// signal Where matching.
 
 import (
 	"context"
@@ -199,7 +199,7 @@ on("test.ints@1", fn=f)`
 	}
 }
 
-// R5: a where={"code": 7} predicate is built from values.ToGo output
+// Regression: a where={"code": 7} predicate is built from values.ToGo output
 // (int64 now, float64 under the old converter). It must still match
 // events whose data carries float64(7) (JSON-shaped payloads) and
 // int64(7) alike, through both the live subscription and backtest.

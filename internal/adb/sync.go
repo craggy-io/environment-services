@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Sync file transfer for single files (bulk trees go over exec:tar, §5.2).
+// Sync file transfer for single files (bulk trees go over exec:tar).
 
 func syncConn(ctx context.Context, c *Client, serial string) (net.Conn, error) {
 	conn, err := c.transport(ctx, serial)

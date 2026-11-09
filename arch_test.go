@@ -9,20 +9,20 @@ import (
 )
 
 // allow returns a rule that lets the from packages import only the listed
-// in-module packages (execution plan §4). Anything else in the module is
+// in-module packages. Anything else in the module is
 // forbidden. Test files aren't checked: test-only helpers such as
 // internal/envtestfake are reached from _test.go files.
 func allow(from []string, imports ...string) archtest.Rule {
 	return archtest.Rule{
-		Name:   "§4 import matrix for " + strings.Join(from, ", "),
-		Why:    "add the import to the §4 matrix in the execution plan first, then here",
+		Name:   "import matrix for " + strings.Join(from, ", "),
+		Why:    "add the import to the layering rules in AGENTS.md first, then here",
 		From:   from,
 		Forbid: []string{"./..."},
 		Allow:  imports,
 	}
 }
 
-// TestLayering enforces the import matrix of execution plan §4: the
+// TestLayering enforces the import matrix documented in AGENTS.md: the
 // in-module allowlist plus the external confinements.
 func TestLayering(t *testing.T) {
 	archtest.Check(t, archtest.Config{
@@ -30,7 +30,7 @@ func TestLayering(t *testing.T) {
 		// matrix, and a missing one fails rather than passing vacuously.
 		Packages: []string{
 			"./envspec", "./environments", "./envcap", "./envtest",
-			"./examples/demo", "./cmd/xfer-agent",
+			"./examples/demo",
 			"./internal/adapter", "./internal/adb", "./internal/androiddev",
 			"./internal/adapters/androidemu", "./internal/adapters/androidphys",
 			"./internal/adapters/docker", "./internal/adapters/hostenv",
@@ -47,7 +47,6 @@ func TestLayering(t *testing.T) {
 				"./internal/signalcore", "./internal/store", "./internal/vault", "./internal/xfer"),
 			allow([]string{"./envtest"}, "./envspec", "./environments", "./internal/signalcore"),
 			allow([]string{"./examples/demo"}, "./envspec", "./environments", "./envcap"),
-			allow([]string{"./cmd/xfer-agent"}, "./internal/xfer"),
 			allow([]string{"./internal/adapter", "./internal/rules"}, "./envspec", "./internal/signalcore"),
 			allow([]string{"./internal/hostmon", "./internal/store", "./internal/vault",
 				"./internal/xfer", "./internal/signalcore"}, "./envspec"),
@@ -64,7 +63,7 @@ func TestLayering(t *testing.T) {
 				// must not pull drivers, SQLite or Docker clients transitively.
 				// It imports nothing in-module, so stdlib-only here is transitive.
 				Name:   "envspec is stdlib-only",
-				Why:    "envspec is load-bearing for consumers (execution plan §3.1, §4)",
+				Why:    "envspec is load-bearing for consumers",
 				From:   []string{"./envspec"},
 				Forbid: []string{archtest.External},
 			},
@@ -103,7 +102,7 @@ func TestLayering(t *testing.T) {
 			},
 			{
 				Name:   "never import the craggy-labs application",
-				Why:    "no library imports the application that wires it; craggy-labs is a private consumer of this module (craggy-labs plan §4.5)",
+				Why:    "no library imports the application that wires it",
 				From:   []string{"./..."},
 				Forbid: []string{"github.com/craggy-io/craggy-labs/..."},
 			},

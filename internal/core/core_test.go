@@ -67,7 +67,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 
 var ownerA = envspec.Owner{ID: "agent:test", Session: "s1"}
 
-// §10 #1: concurrent identical provisioning → one op, one resource.
+// Gate: concurrent identical provisioning → one op, one resource.
 func TestConcurrentIdenticalProvisionOneResource(t *testing.T) {
 	world := envtestfake.NewWorld()
 	created := envtestfake.NewCreated(world, envspec.Container)
@@ -118,7 +118,7 @@ func TestConcurrentIdenticalProvisionOneResource(t *testing.T) {
 	}
 }
 
-// §10 #2: concurrent warm claims → one wins the warm instance.
+// Gate: concurrent warm claims → one wins the warm instance.
 func TestConcurrentWarmClaimsOneWinner(t *testing.T) {
 	world := envtestfake.NewWorld()
 	created := envtestfake.NewCreated(world, envspec.Container)
@@ -163,7 +163,7 @@ func TestConcurrentWarmClaimsOneWinner(t *testing.T) {
 	}
 }
 
-// §10 #3: crash after Create, before the result is persisted →
+// Gate: crash after Create, before the result is persisted →
 // recovery rediscovers by deterministic name and finishes the op.
 func TestCrashAfterCreateRecovers(t *testing.T) {
 	dir := t.TempDir()
@@ -212,7 +212,7 @@ func TestCrashAfterCreateRecovers(t *testing.T) {
 	}
 }
 
-// §10 #4: release during provisioning, late success → still released.
+// Gate: release during provisioning, late success → still released.
 func TestReleaseDuringProvisionLateSuccess(t *testing.T) {
 	world := envtestfake.NewWorld()
 	created := envtestfake.NewCreated(world, envspec.Container)
@@ -259,7 +259,7 @@ func TestReleaseDuringProvisionLateSuccess(t *testing.T) {
 	}
 }
 
-// §10 #5: backend down during recovery → unknown, never lost.
+// Gate: backend down during recovery → unknown, never lost.
 func TestBackendDownRecoveryStaysUnknown(t *testing.T) {
 	dir := t.TempDir()
 	world := envtestfake.NewWorld()
@@ -299,7 +299,7 @@ func TestBackendDownRecoveryStaysUnknown(t *testing.T) {
 	}
 }
 
-// §10 #6: destroy fails → op pending, visible, retried to completion.
+// Gate: destroy fails → op pending, visible, retried to completion.
 func TestDestroyFailureStaysPendingAndRetries(t *testing.T) {
 	world := envtestfake.NewWorld()
 	created := envtestfake.NewCreated(world, envspec.Container)
@@ -354,7 +354,7 @@ func TestDestroyLeavesPresentStaysPending(t *testing.T) {
 	})
 }
 
-// §10 #7: stale handle after warm reassignment → epoch rejection.
+// Gate: stale handle after warm reassignment → epoch rejection.
 func TestStaleHandleAfterWarmReassignment(t *testing.T) {
 	world := envtestfake.NewWorld()
 	created := envtestfake.NewCreated(world, envspec.Container)
@@ -395,7 +395,7 @@ func TestStaleHandleAfterWarmReassignment(t *testing.T) {
 	}
 }
 
-// §10 #10: recovered env released → reservation SUM returns to zero.
+// Gate: recovered env released → reservation SUM returns to zero.
 func TestRecoveredReleaseReturnsReservation(t *testing.T) {
 	dir := t.TempDir()
 	world := envtestfake.NewWorld()

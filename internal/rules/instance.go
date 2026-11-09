@@ -71,7 +71,7 @@ func (in *instance) info() InstanceInfo {
 func (in *instance) bind(cs *compileState) error {
 	cs.inst = in
 	in.cs = cs
-	// A rule can't subscribe to its own outputs (§8.3).
+	// A rule can't subscribe to its own outputs.
 	own := "rule." + in.decl.Name + "."
 	for _, s := range cs.subs {
 		if len(s.stream) > len(own) && s.stream[:len(own)] == own {
@@ -92,7 +92,7 @@ func (in *instance) start(parent context.Context) error {
 	}
 	ctx, cancel := context.WithCancel(parent)
 	in.cancel = cancel
-	// Resolve subscriptions first; Applies errors fail Load (§8.2).
+	// Resolve subscriptions first; Applies errors fail Load.
 	for _, s := range in.cs.subs {
 		sel, err := selectorFor(s)
 		if err != nil {

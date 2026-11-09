@@ -18,10 +18,10 @@ import (
 	"github.com/craggy-io/environment-services/envspec"
 )
 
-const spoolThreshold = 1 << 20 // §5.4: <1MiB in memory, larger spooled
+const spoolThreshold = 1 << 20 // <1MiB in memory, larger spooled
 
 // WriteTar streams src as tar to w, straight from Source.Open with no temp
-// file or Materialize copy (§5.2). Entries are written in stream order.
+// file or Materialize copy. Entries are written in stream order.
 func WriteTar(ctx context.Context, src envspec.Source, w io.Writer, opts Options) (envspec.TransferStats, error) {
 	return writeTarEntries(ctx, src, nil, w, opts, "push")
 }
@@ -159,8 +159,8 @@ type pendingFile struct {
 	err  error
 }
 
-// ReadTar consumes a tar stream into sink. The reader is single-threaded
-// (§5.4): small files buffer in memory, large ones spool to temp files,
+// ReadTar consumes a tar stream into sink. The reader is single-threaded:
+// small files buffer in memory, large ones spool to temp files,
 // and adds fan out to workers only for a ConcurrentSink.
 func ReadTar(ctx context.Context, r io.Reader, sink envspec.Sink, opts Options) (envspec.TransferStats, error) {
 	start := time.Now()
@@ -371,7 +371,7 @@ func Manifest(ctx context.Context, src envspec.Source) ([]envspec.Entry, error) 
 	return out, nil
 }
 
-// Diff computes a delta between source and destination manifests (§5.3):
+// Diff computes a delta between source and destination manifests:
 // entries to send (new or changed by (path,digest,mode)) and, when mirror
 // is set, destination paths to delete.
 func Diff(src, dst []envspec.Entry, mirror bool) (send []envspec.Entry, del []string) {

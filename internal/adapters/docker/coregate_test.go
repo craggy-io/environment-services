@@ -1,6 +1,6 @@
 package docker
 
-// Core-driven gates (§10 #3/#5/#6) against the docker adapter with
+// Core-driven gates against the docker adapter with
 // a fake engine: the durable core provisions, crashes (Close with
 // Disconnect = process death without cleanup), recovers by
 // deterministic name and label discovery, tolerates a down backend
@@ -53,14 +53,14 @@ func TestCoreCrashRecoveryAndBackendDown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Crash: disconnect without releasing (§10 #3 shape: recovery
+	// Crash: disconnect without releasing (recovery
 	// must re-observe and re-materialise, not recreate).
 	if err := m1.Close(ctx, core.ShutdownDisconnect); err != nil {
 		t.Fatal(err)
 	}
 
 	// Backend down at recovery: presence must stay Unknown, env
-	// must not be declared lost (§10 #5).
+	// must not be declared lost.
 	f.down = true
 	m2 := coreWithFake(t, dir, f)
 	info, err := m2.Info(envID)
@@ -106,7 +106,7 @@ func TestCoreCrashRecoveryAndBackendDown(t *testing.T) {
 		t.Fatalf("recovery created a second container (creates=%d); rediscovery by name must win", f.creates)
 	}
 
-	// Destroy through the core verifies Absent via Observe (§10 #6).
+	// Destroy through the core verifies Absent via Observe.
 	if err := m2.Release(ctx, envID); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestCoreDestroyFailureStaysPending(t *testing.T) {
 		t.Fatal(err)
 	}
 	if info.State == envspec.StateReleased {
-		t.Fatal("env declared released while destroy is failing (§10 #6)")
+		t.Fatal("env declared released while destroy is failing")
 	}
 	f.removeErr = nil
 	deadline := time.Now().Add(15 * time.Second)

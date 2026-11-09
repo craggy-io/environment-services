@@ -25,7 +25,7 @@ var fridaSession string
 
 // AndroidFrida runs a Frida agent script through the host frida client
 // against the managed frida-server component. The agent never handles
-// frida-server, ports or versions (§10).
+// frida-server, ports or versions.
 type fridaCollector struct{ dev *Device }
 
 func (f *fridaCollector) Name() string { return "android.frida" }

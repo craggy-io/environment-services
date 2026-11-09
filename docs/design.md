@@ -1,9 +1,5 @@
 # Design notes
 
-Distilled from [plan.md](plan.md) (the design authority) as amended by the
-governing decisions in [execution-plan.md](execution-plan.md) §0. Where the
-two disagree, the execution plan wins.
-
 ## The separation
 
 One durable **lifecycle core** owns identity, desired state, leases,

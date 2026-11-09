@@ -6,9 +6,7 @@ development rules below apply to work here. Consumers should explicitly
 provide this guide to their coding agent; installing a dependency does not
 imply its AGENTS.md is read.
 
-Design authority: [docs/plan.md](docs/plan.md) (lifecycle design), as amended
-by the governing decisions D1–D9 in
-[docs/execution-plan.md](docs/execution-plan.md) §0. This is a full cutover:
+Design reference: [docs/design.md](docs/design.md). This is a full cutover:
 new `craggy.*` identities only, no legacy adoption, migration, compatibility
 projections, shims or deprecation.
 
@@ -26,15 +24,14 @@ projections, shims or deprecation.
 | Signal hub, recorder, ranges | `internal/signalcore` (each adapter owns its collectors) |
 | Starlark signal rules | `internal/rules` on script-services |
 | Credential leasing and redaction | `internal/vault` (`Secret.Reveal` never leaves `internal/`) |
-| File-tree transfer | `internal/xfer`; in-environment agent is `cmd/xfer-agent` |
+| File-tree transfer | `internal/xfer` (tar, manifests, delta); runtimes move tar through `adapter.Transferrer` (Android: device `tar` over adb) |
 
 Public surface is exactly `envspec`, `environments`, `envcap` (production)
 plus `envtest` (test-only). Everything else lives under `internal/`.
 Package guides: [docs/envspec.md](docs/envspec.md),
 [docs/environments.md](docs/environments.md), [docs/signals.md](docs/signals.md),
 [docs/rules.md](docs/rules.md), [docs/capabilities.md](docs/capabilities.md),
-[docs/design.md](docs/design.md). Consumer cutover steps (FREEZE, gates,
-platform, clean drain) are in [docs/cutover.md](docs/cutover.md).
+[docs/design.md](docs/design.md).
 
 ## Import rules
 
@@ -73,7 +70,7 @@ Dependencies point one way and are enforced by `arch_test.go`
   (labels, names, metadata keys). Foreign resources are never adopted:
   adapters mark them `Foreign` in `Discover` results and the core skips
   them. There is no adoption or legacy-warning API; draining a previous
-  stack is an operator task ([docs/cutover.md](docs/cutover.md)).
+  stack is an operator task.
 - Fully remove obsolete code and call sites rather than adding deprecation
   markers, compatibility shims, aliases or commented-out remnants. If it is
   gone, it is gone.
@@ -103,10 +100,7 @@ go test ./... -count=1
 
 The gate is those three commands green (the `arch_test.go` layering matrix
 runs inside `go test`), `gofmt` applied to touched files, and no legacy
-module-path or label strings in `*.go` (the historical design documents
-`docs/plan.md`/`docs/execution-plan.md` and the old-stack drain commands in
-`docs/cutover.md` still name the old stack for operators; they are not
-identities this code creates or recognises). When touching lifecycle,
+module-path or label strings in `*.go`. When touching lifecycle,
 signal or concurrency code, also run
 `go test ./internal/core/ ./internal/signalcore/ -race -count=1` and
 `deadcode -test ./...` (zero findings; delete real dead code, never mark it
