@@ -11,7 +11,6 @@ import (
 	"io"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -150,14 +149,9 @@ func (d *Device) PackageSnapshot(ctx context.Context, pkg string) (envspec.Packa
 		return envspec.PackageSnapshot{}, fmt.Errorf("android: invalid installed digest for %s: %w", pkg, err)
 	}
 	result.CodeSHA256 = strings.ToLower(fields[0])
-	uidOut, _, err := d.Shell(ctx, "cmd package list packages -U "+pkg)
+	result.UID, err = packageUID(ctx, d, pkg)
 	if err != nil {
-		return envspec.PackageSnapshot{}, err
-	}
-	for _, field := range strings.Fields(uidOut) {
-		if raw, ok := strings.CutPrefix(field, "uid:"); ok {
-			result.UID, _ = strconv.Atoi(raw)
-		}
+		return envspec.PackageSnapshot{}, fmt.Errorf("android: installed package %s uid: %w", pkg, err)
 	}
 	if result.UID <= 0 {
 		return envspec.PackageSnapshot{}, fmt.Errorf("android: installed package %s has no observed uid", pkg)

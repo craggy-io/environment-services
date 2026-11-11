@@ -326,14 +326,35 @@ func (w *stateWatch) codeSHA256(ctx context.Context, path string) (string, error
 	return sha, nil
 }
 
-// packageUID reads a package's uid from `pm list packages -U`, whose
-// filter is a substring match: only the exact name counts.
+// packageUID reads the exact package's user-0 uid. Android 7.1 does not
+// support `pm list packages -U`, so only that unsupported-option response
+// falls back to the package's own dumpsys block.
 func packageUID(ctx context.Context, e *Device, pkg string) (int, error) {
-	b, _, err := guestOutput(ctx, e, guestCmd{Argv: []string{"pm", "list", "packages", "-U", pkg}}, 64<<10)
+	if err := validatePackageName(pkg); err != nil {
+		return 0, err
+	}
+	out, code, err := e.Shell(ctx, "pm list packages -U "+pkg)
 	if err != nil {
 		return 0, fmt.Errorf("pm list packages -U %s: %w", pkg, err)
 	}
-	for _, line := range strings.Split(string(b), "\n") {
+	if strings.Contains(strings.ToLower(out), "unknown option: -u") {
+		dump, dumpCode, dumpErr := e.Shell(ctx, "dumpsys package "+pkg)
+		if dumpErr != nil {
+			return 0, fmt.Errorf("dumpsys package %s: %w", pkg, dumpErr)
+		}
+		if dumpCode != 0 {
+			return 0, fmt.Errorf("dumpsys package %s: exit %d: %s", pkg, dumpCode, strings.TrimSpace(dump))
+		}
+		if uid := exactDumpPackageUID(dump, pkg); uid > 0 {
+			return uid, nil
+		}
+		return 0, fmt.Errorf("dumpsys package %s: exact package uid not found", pkg)
+	}
+	if code != 0 {
+		return 0, fmt.Errorf("pm list packages -U %s: exit %d: %s", pkg, code, strings.TrimSpace(out))
+	}
+	// The pm filter is a substring match: only the exact package counts.
+	for _, line := range strings.Split(out, "\n") {
 		f := strings.Fields(strings.TrimSpace(line))
 		if len(f) != 2 || f[0] != "package:"+pkg || !strings.HasPrefix(f[1], "uid:") {
 			continue
@@ -345,6 +366,28 @@ func packageUID(ctx context.Context, e *Device, pkg string) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("pm list packages -U %s: package not listed", pkg)
+}
+
+func exactDumpPackageUID(dump, pkg string) int {
+	inPackage := false
+	for _, line := range strings.Split(dump, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "Package [") {
+			if inPackage {
+				break
+			}
+			inPackage = strings.HasPrefix(trimmed, "Package ["+pkg+"] (")
+			continue
+		}
+		if !inPackage || !strings.HasPrefix(trimmed, "userId=") {
+			continue
+		}
+		if uid, err := strconv.Atoi(strings.TrimPrefix(trimmed, "userId=")); err == nil && uid > 0 {
+			return uid
+		}
+		break
+	}
+	return 0
 }
 
 // storageRoots are a package's private storage roots for user 0:
