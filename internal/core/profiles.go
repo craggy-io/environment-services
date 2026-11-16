@@ -88,7 +88,7 @@ func StockProfiles() []envspec.Profile {
 		},
 		{
 			Name: "host-tools", Kind: envspec.Host,
-			Description:   "The machine's own toolchain (Android SDK build-tools, platform-tools, anything installed). For tools that only run on the host. Not for samples.",
+			Description:   "The machine's own toolchain (Android SDK build-tools, platform-tools, anything installed). Commands follow the host OS: use Windows commands on Windows, Unix commands on Unix. For tools that only run on the host. Not for samples.",
 			Resources:     envspec.Resources{CPUs: 2, MemoryMB: 4096},
 			MaxResources:  envspec.Resources{CPUs: 8, MemoryMB: 32768},
 			Network:       envspec.NetworkOpen,

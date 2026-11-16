@@ -90,6 +90,9 @@ func TestHostLifecycleOpenDestroy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := inst.(adapter.Executor).Exec(ctx, op, adapter.ExecCmd{Argv: []string{"craggy-command-that-does-not-exist"}}); !errors.Is(err, envspec.ErrNotFound) {
+		t.Fatalf("missing host executable: %v", err)
+	}
 	if inst.Ref().Name != adapter.NameFor(id) || !strings.HasPrefix(inst.Ref().Name, "craggy-") {
 		t.Fatalf("job identity = %q, want %q", inst.Ref().Name, adapter.NameFor(id))
 	}

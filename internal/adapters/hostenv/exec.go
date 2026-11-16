@@ -3,6 +3,7 @@ package hostenv
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -126,6 +127,9 @@ func (i *Instance) Exec(ctx context.Context, op adapter.OpContext, c adapter.Exe
 	environ := i.buildEnv(c)
 	bin, err := i.lookPath(c.Argv[0], environ)
 	if err != nil {
+		if errors.Is(err, osexec.ErrNotFound) {
+			return nil, fmt.Errorf("%w: hostenv: executable %q is not installed on this %s host; choose a host command or a Linux environment", envspec.ErrNotFound, c.Argv[0], runtime.GOOS)
+		}
 		return nil, fmt.Errorf("hostenv: find %q: %w", c.Argv[0], err)
 	}
 	execCtx := ctx

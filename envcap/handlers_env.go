@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -55,7 +56,7 @@ func (s *set) build() []capability {
 		Description: "Extend an environment's holder lease. This is the only renewal: using an environment does not renew it.",
 		Input:       inputSchema[envIDIn](), Handler: s.handleKeepalive})
 	add(capability{Name: "env.exec", Version: 1, Effects: "long", Tags: []string{"agent", "exec"},
-		Description: "Run a command in an environment to completion. Output also streams to env.process@1 under the returned proc id; the inline tail caps at 64KiB and full output is stored as artifacts when larger.",
+		Description: "Run a command in an environment to completion. argv runs directly; cmd uses cmd.exe on a Windows host or sh elsewhere. Output also streams to env.process@1 under the returned proc id; the inline tail caps at 64KiB and full output is stored as artifacts when larger.",
 		Input:       inputSchema[execIn](),
 		Handler:     s.handleExec})
 	add(capability{Name: "env.fs.list", Version: 1, Effects: "readonly", Tags: []string{"agent"},
@@ -476,7 +477,7 @@ func (s *set) handleKeepalive(ctx context.Context, call *call) (any, error) {
 type execIn struct {
 	Env            string            `json:"env" jsonschema:"environment id (env_…) from env.provision, env.list or env.status"`
 	Argv           []string          `json:"argv,omitempty" jsonschema:"command and arguments, run without a shell"`
-	Cmd            string            `json:"cmd,omitempty" jsonschema:"shell command line, run as sh -c; give argv or cmd"`
+	Cmd            string            `json:"cmd,omitempty" jsonschema:"shell command line, run with cmd.exe on a Windows host or sh elsewhere; give argv or cmd"`
 	EnvVars        map[string]string `json:"env_vars,omitempty" jsonschema:"extra environment variables"`
 	TimeoutSeconds int               `json:"timeout_seconds,omitempty"`
 }
@@ -492,7 +493,7 @@ func (s *set) handleExec(ctx context.Context, call *call) (any, error) {
 	}
 	argv := in.Argv
 	if len(argv) == 0 && in.Cmd != "" {
-		argv = []string{"sh", "-c", in.Cmd}
+		argv = shellArgv(info.Kind, in.Cmd)
 	}
 	if len(argv) == 0 {
 		return nil, &agentError{Code: "invalid", Message: "env.exec needs argv or cmd",
@@ -545,6 +546,13 @@ func (s *set) handleExec(ctx context.Context, call *call) (any, error) {
 		out["cancelled"] = true
 	}
 	return out, nil
+}
+
+func shellArgv(kind envspec.Kind, line string) []string {
+	if kind == envspec.Host && runtime.GOOS == "windows" {
+		return []string{"cmd.exe", "/d", "/s", "/c", line}
+	}
+	return []string{"sh", "-c", line}
 }
 
 func (s *set) storeExecOutput(ctx context.Context, envID, image string, res ExecResult) (map[string]Ref, error) {
