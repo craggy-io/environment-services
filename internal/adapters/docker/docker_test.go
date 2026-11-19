@@ -476,10 +476,10 @@ func TestArchiveRoundTripStripsBaseDir(t *testing.T) {
 	if _, err := xfer.WriteTar(ctx, envspec.MemSource(map[string][]byte{"sub/a.txt": []byte("alpha")}), &buf, xfer.Options{}); err != nil {
 		t.Fatal(err)
 	}
-	if err := tr.PutArchive(ctx, op, "/work", &buf); err != nil {
+	if err := tr.PutArchive(ctx, op, "in/", &buf); err != nil {
 		t.Fatal(err)
 	}
-	rc, err := tr.GetArchive(ctx, op, "/work")
+	rc, err := tr.GetArchive(ctx, op, "/work/in")
 	if err != nil {
 		t.Fatal(err)
 	}

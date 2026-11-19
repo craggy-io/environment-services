@@ -16,6 +16,17 @@ import (
 	"github.com/craggy-io/environment-services/internal/xfer"
 )
 
+// workspacePath resolves transfer paths and command directories against the same working directory.
+func workspacePath(name string) string {
+	if name == "" {
+		return "/work"
+	}
+	if strings.HasPrefix(name, "/") {
+		return name
+	}
+	return "/work/" + name
+}
+
 // Exec runs through the attach API with multiplexed streams demuxed here.
 func (i *Instance) Exec(ctx context.Context, op adapter.OpContext, c adapter.ExecCmd) (*adapter.Process, error) {
 	i.mu.Lock()
@@ -26,12 +37,6 @@ func (i *Instance) Exec(ctx context.Context, op adapter.OpContext, c adapter.Exe
 	i.mu.Unlock()
 	for k, v := range c.Env {
 		envv = append(envv, k+"="+v)
-	}
-	dir := c.Dir
-	if dir == "" {
-		dir = "/work"
-	} else if !strings.HasPrefix(dir, "/") {
-		dir = "/work/" + dir
 	}
 	execCtx := ctx
 	var cancel context.CancelFunc
@@ -50,7 +55,7 @@ func (i *Instance) Exec(ctx context.Context, op adapter.OpContext, c adapter.Exe
 		AttachStdout: true,
 		AttachStderr: !c.TTY,
 		Env:          envv,
-		WorkingDir:   dir,
+		WorkingDir:   workspacePath(c.Dir),
 		Cmd:          c.Argv,
 	})
 	if err != nil {
@@ -153,6 +158,7 @@ func (i *Instance) execCapture(ctx context.Context, op adapter.OpContext, argv [
 
 func (i *Instance) PutArchive(ctx context.Context, op adapter.OpContext, dst string, tarStream io.Reader) error {
 	// Docker extracts into an existing dir; create it first.
+	dst = workspacePath(dst)
 	_, stderr, code, err := i.execCapture(ctx, op, []string{"mkdir", "-p", dst}, "")
 	if err != nil || code != 0 {
 		return fmt.Errorf("docker: prepare archive destination %s (exit %d): %s: %v", dst, code, strings.TrimSpace(string(stderr)), err)
@@ -168,6 +174,7 @@ func (i *Instance) PutArchive(ctx context.Context, op adapter.OpContext, dst str
 }
 
 func (i *Instance) GetArchive(ctx context.Context, op adapter.OpContext, src string) (io.ReadCloser, error) {
+	src = workspacePath(src)
 	res, err := i.ad.cli.CopyFromContainer(ctx, i.id, client.CopyFromContainerOptions{SourcePath: src})
 	if err != nil {
 		return nil, engineErr(err)

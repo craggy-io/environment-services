@@ -74,10 +74,10 @@ func TestDockerContainerLifecycle(t *testing.T) {
 		t.Fatal("image digest must be recorded")
 	}
 	// Push, exec (stdout/stderr split), pull.
-	if err := h.Push(ctx, envspec.MemSource(map[string][]byte{"a.txt": []byte("alpha")}), "/work"); err != nil {
+	if err := h.Push(ctx, envspec.MemSource(map[string][]byte{"a.txt": []byte("alpha")}), "in/"); err != nil {
 		t.Fatal(err)
 	}
-	out, errOut, code, err := h.Exec(ctx, envspec.Cmd{Argv: []string{"sh", "-c", "cat /work/a.txt; echo oops 1>&2; cp /work/a.txt /work/b.txt"}})
+	out, errOut, code, err := h.Exec(ctx, envspec.Cmd{Argv: []string{"sh", "-c", "cat /work/in/a.txt; echo oops 1>&2; cp /work/in/a.txt /work/in/b.txt"}})
 	if err != nil || code != 0 {
 		t.Fatalf("exec %d %v", code, err)
 	}
@@ -88,7 +88,7 @@ func TestDockerContainerLifecycle(t *testing.T) {
 		t.Fatalf("stderr not split: %q", errOut)
 	}
 	sink := envspec.NewMemSink()
-	if err := h.Pull(ctx, "/work", sink); err != nil {
+	if err := h.Pull(ctx, "in/", sink); err != nil {
 		t.Fatal(err)
 	}
 	if string(sink.Files["a.txt"]) != "alpha" || string(sink.Files["b.txt"]) != "alpha" {
@@ -111,7 +111,7 @@ func TestDockerContainerLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recover after manager restart: %v", err)
 	}
-	if out, _, _, err := got.Exec(ctx, envspec.Cmd{Argv: []string{"cat", "/work/a.txt"}}); err != nil || string(out) != "alpha" {
+	if out, _, _, err := got.Exec(ctx, envspec.Cmd{Argv: []string{"cat", "/work/in/a.txt"}}); err != nil || string(out) != "alpha" {
 		t.Fatalf("recovered env exec: %q %v", out, err)
 	}
 	if err := m2.Release(ctx, envID); err != nil {
