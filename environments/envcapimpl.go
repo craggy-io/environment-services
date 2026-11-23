@@ -209,7 +209,11 @@ func (d *EnvCapDeps) ExecEnv(ctx context.Context, id string, cmd envspec.Cmd) (e
 	exit, werr := p.Wait()
 	<-done
 	<-done
-	return envcap.ExecResult{ProcID: procID, Stdout: outBuf.Bytes(), Stderr: errBuf.Bytes(), Exit: exit}, xlate(werr)
+	// What the process printed is scrubbed of the secrets delivered into
+	// environments before anyone is answered with it or it is kept: a
+	// command that echoes a credential it was given doesn't hand it to the
+	// agent that ran it. The value itself only; an encoding of it passes.
+	return envcap.ExecResult{ProcID: procID, Stdout: d.m.scrub(outBuf.Bytes()), Stderr: d.m.scrub(errBuf.Bytes()), Exit: exit}, xlate(werr)
 }
 
 // PoolCapacities reports both admission pools.

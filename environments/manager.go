@@ -164,6 +164,15 @@ func (m *Manager) SyncCredentials(ctx context.Context) error {
 	return m.core.SyncCredentials(ctx)
 }
 
+// scrub is b without the secret values delivered into environments. It
+// is b itself when it holds none.
+func (m *Manager) scrub(b []byte) []byte {
+	if m.redactor == nil || !m.redactor.ContainsSecret(b) {
+		return b
+	}
+	return []byte(m.redactor.RedactString(string(b)))
+}
+
 // RedactString scrubs known secret values from s. Use it on any
 // guest-derived text before showing it outside the trust boundary.
 func (m *Manager) RedactString(s string) string {
