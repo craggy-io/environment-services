@@ -11,9 +11,7 @@ import (
 
 	"github.com/moby/moby/client"
 
-	"github.com/craggy-io/environment-services/envspec"
 	"github.com/craggy-io/environment-services/internal/adapter"
-	"github.com/craggy-io/environment-services/internal/xfer"
 )
 
 // workspacePath resolves transfer paths and command directories against the same working directory.
@@ -262,19 +260,21 @@ func (i *Instance) InjectFile(ctx context.Context, path string, value []byte) er
 	if !strings.HasPrefix(path, "/run/secrets/") {
 		path = "/run/secrets/" + path[strings.LastIndex(path, "/")+1:]
 	}
-	dir := path[:strings.LastIndex(path, "/")]
-	name := path[strings.LastIndex(path, "/")+1:]
-	var buf bytes.Buffer
-	if _, err := xfer.WriteTar(ctx, envspec.MemSource(map[string][]byte{name: value}), &buf, xfer.Options{}); err != nil {
+	// /run/secrets is a tmpfs, so the file is in no image or snapshot. The
+	// engine's copy writes to the container's layer under the mount,
+	// where nothing sees it, so the file is written from inside: the
+	// content goes in on standard input and is in no argument.
+	p, err := i.Exec(ctx, adapter.OpContext{EnvID: i.envID}, adapter.ExecCmd{
+		Argv: []string{"sh", "-c", `umask 077 && cat > "$0" && chmod 400 "$0"`, path}, User: "root", Stdin: bytes.NewReader(value)})
+	if err != nil {
 		return err
 	}
-	if _, err := i.ad.cli.CopyToContainer(ctx, i.id, client.CopyToContainerOptions{
-		DestinationPath: dir, Content: &buf, AllowOverwriteDirWithFile: true,
-	}); err != nil {
-		return engineErr(err)
-	}
-	if p, err := i.Exec(ctx, adapter.OpContext{EnvID: i.envID}, adapter.ExecCmd{Argv: []string{"chmod", "400", path}, User: "root"}); err == nil {
-		drainWait(p)
+	code, err := drainWait(p)
+	switch {
+	case err != nil:
+		return err
+	case code != 0:
+		return fmt.Errorf("docker: writing %s in the container failed (exit %d)", path, code)
 	}
 	return nil
 }
