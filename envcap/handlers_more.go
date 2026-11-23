@@ -144,7 +144,7 @@ func (s *set) buildAndroid() []capability {
 				if _, _, err := s.envOwned(ctx, in.Env); err != nil {
 					return nil, err
 				}
-				if err := s.deps.Manager.TypeSecret(ctx, in.Env, in.Lease, in.Field); err != nil {
+				if err := s.deps.Manager.TypeSecret(ctx, in.Env, in.Lease, in.Field, in.Once); err != nil {
 					return nil, err
 				}
 				return map[string]any{"env": in.Env, "typed": in.Field}, nil

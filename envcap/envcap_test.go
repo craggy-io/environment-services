@@ -426,7 +426,7 @@ func (f *fakeManager) Android(id string) (envcap.AndroidDevice, error) {
 	return &fakeDevice{}, nil
 }
 
-func (f *fakeManager) TypeSecret(ctx context.Context, envID, leaseID, field string) error {
+func (f *fakeManager) TypeSecret(ctx context.Context, envID, leaseID, field string, once bool) error {
 	if _, err := f.env(envID); err != nil {
 		return err
 	}

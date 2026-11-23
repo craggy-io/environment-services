@@ -333,7 +333,7 @@ func TestEnvCapDepsSurface(t *testing.T) {
 	}
 	// TypeSecret against a host env refuses (not an Android device)
 	// before redeeming anything.
-	if err := deps.TypeSecret(ctx, h.ID(), "lease_missing", "password"); err == nil {
+	if err := deps.TypeSecret(ctx, h.ID(), "lease_missing", "password", false); err == nil {
 		t.Fatal("deps.TypeSecret(host env) succeeded")
 	}
 }

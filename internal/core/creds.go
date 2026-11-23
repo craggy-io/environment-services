@@ -2,11 +2,13 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/craggy-io/environment-services/envspec"
 	"github.com/craggy-io/environment-services/internal/adapter"
@@ -40,6 +42,10 @@ type Credentials interface {
 	// Redeem hands over the secret behind one lease, which must be held
 	// by holder.
 	Redeem(ctx context.Context, lease, holder string) (HeldCredential, error)
+	// RedeemOnce is Redeem that also takes one value of a once-only
+	// field, such as a backup code: the store hands it over and it is
+	// gone.
+	RedeemOnce(ctx context.Context, lease, holder, field string) (HeldCredential, error)
 	// RedeemHolder hands over the secret behind every lease holder has
 	// for the manager's uses; none is not an error.
 	RedeemHolder(ctx context.Context, holder string) ([]HeldCredential, error)
@@ -70,12 +76,33 @@ type CredentialLease struct {
 	Public map[string]string
 }
 
-// HeldCredential is a lease with the secret behind it, by field. It is
-// the only way a secret value reaches the manager, which delivers it and
+// HeldCredential is a lease with the secret behind it, by field: what the
+// store delivers of the credential, which may be a one-time code in
+// place of its seed and never what the store keeps to itself. It is the
+// only way a secret value reaches the manager, which delivers it and
 // teaches its redactor the value; it is never stored, logged or returned.
 type HeldCredential struct {
 	CredentialLease
 	Secret map[string]string
+	// Base64 are the fields of Secret that are a file's content, which
+	// may be binary and so is base64.
+	Base64 []string
+}
+
+// plain is each secret field as it is delivered: a file's content
+// decoded. A field that doesn't decode is left out.
+func (h HeldCredential) plain() map[string][]byte {
+	out := make(map[string][]byte, len(h.Secret))
+	for field, value := range h.Secret {
+		if !slices.Contains(h.Base64, field) {
+			out[field] = []byte(value)
+			continue
+		}
+		if raw, err := base64.StdEncoding.DecodeString(value); err == nil {
+			out[field] = raw
+		}
+	}
+	return out
 }
 
 var (
@@ -122,23 +149,52 @@ func deliveryUse(req envspec.CredRequest) (string, error) {
 	return "", Invalidf("cred delivery %q is for the use %s, not %q", req.Deliver, strings.Join(uses, " or "), req.Use)
 }
 
-// defaultField is the secret field delivered when a request names none.
-func defaultField(kind string) string {
-	if kind == "api-key" {
-		return "api_key"
+// fieldOf is the secret field of a redeemed credential to deliver: the
+// one named, or with none named its password, or the only field it
+// delivers. A credential that delivers several and has no password needs
+// the field named.
+func fieldOf(held HeldCredential, named string) (string, error) {
+	if named != "" {
+		if _, ok := held.Secret[named]; !ok {
+			return "", Invalidf("credential %s delivers no %q field; it delivers %s", held.Cred, named, strings.Join(fieldsOf(held), ", "))
+		}
+		return named, nil
 	}
-	return "password"
+	if _, ok := held.Secret["password"]; ok {
+		return "password", nil
+	}
+	fields := fieldsOf(held)
+	if len(fields) == 1 {
+		return fields[0], nil
+	}
+	return "", Invalidf("credential %s delivers %s: name the field", held.Cred, strings.Join(fields, ", "))
 }
 
-// learn wraps a redeemed credential's secret and teaches the redactor
-// its values for as long as the holder has it.
+func fieldsOf(held HeldCredential) []string {
+	fields := make([]string, 0, len(held.Secret))
+	for field := range held.Secret {
+		fields = append(fields, field)
+	}
+	slices.Sort(fields)
+	return fields
+}
+
+// learn wraps a redeemed credential's secret as it is delivered, a
+// file's content decoded, and teaches the redactor its values for as
+// long as the holder has it. Content that isn't text is delivered but
+// not looked for in output.
 func (m *Manager) learn(held HeldCredential) map[string]redact.Secret {
-	secret := make(map[string]redact.Secret, len(held.Secret))
-	for field, value := range held.Secret {
-		secret[field] = redact.NewSecret(value)
+	plain := held.plain()
+	secret := make(map[string]redact.Secret, len(plain))
+	known := make(map[string]redact.Secret, len(plain))
+	for field, value := range plain {
+		secret[field] = redact.NewSecret(string(value))
+		if utf8.Valid(value) {
+			known[field] = secret[field]
+		}
 	}
 	if m.cfg.Redactor != nil {
-		m.cfg.Redactor.Hold(held.Holder, held.Cred, secret)
+		m.cfg.Redactor.Hold(held.Holder, held.Cred, known)
 	}
 	return secret
 }
@@ -214,19 +270,22 @@ func (m *Manager) deliverCred(ctx context.Context, e store.Env, r *runtimeEnv, h
 		return Invalidf("lease %s is for the use %s; the delivery %q needs %s", held.ID, held.Use, req.Deliver, use)
 	}
 	secret := m.learn(held)
-	field := req.Field
-	if field == "" {
-		field = defaultField(held.Kind)
-	}
-	value, has := secret[field]
 	kind, target, _ := strings.Cut(req.Deliver, ":")
+	var value redact.Secret
+	if kind == "env" || kind == "file" {
+		field, err := fieldOf(held, req.Field)
+		if err != nil {
+			return err
+		}
+		value = secret[field]
+	}
 	switch kind {
 	case "env":
 		if target == "" {
 			return Invalidf("cred delivery %q: want env:NAME", req.Deliver)
 		}
-		if !has {
-			return Invalidf("credential %s has no %q field", held.Cred, field)
+		if !utf8.ValidString(value.Reveal()) || strings.ContainsRune(value.Reveal(), 0) {
+			return Invalidf("credential %s: a file that isn't text can't be a variable; deliver it as file:/path", held.Cred)
 		}
 		r.mu.Lock()
 		r.credEnv[target] = value.Reveal()
@@ -238,9 +297,6 @@ func (m *Manager) deliverCred(ctx context.Context, e store.Env, r *runtimeEnv, h
 	case "file":
 		if target == "" {
 			return Invalidf("cred delivery %q: want file:/path", req.Deliver)
-		}
-		if !has {
-			return Invalidf("credential %s has no %q field", held.Cred, field)
 		}
 		if ci, ok := r.inst.(adapter.CredInjector); ok {
 			return ci.InjectFile(ctx, target, []byte(value.Reveal()))
@@ -269,11 +325,23 @@ func (m *Manager) deliverCred(ctx context.Context, e store.Env, r *runtimeEnv, h
 // can be typed into the environment. The lease must be held by the
 // environment, and one taken to inject a variable or a file is refused:
 // what a person granted for that use is not typed.
-func (m *Manager) LoginSecret(ctx context.Context, envID, leaseID, field string) (redact.Secret, error) {
+//
+// once takes one value of a once-only field, a backup code, which the
+// store then forgets: field must name it.
+func (m *Manager) LoginSecret(ctx context.Context, envID, leaseID, field string, once bool) (redact.Secret, error) {
 	if m.cfg.Credentials == nil {
 		return redact.Secret{}, noCredentials("typing a secret needs a credential lease")
 	}
-	held, err := m.cfg.Credentials.Redeem(ctx, leaseID, credHolder(envID))
+	var held HeldCredential
+	var err error
+	switch {
+	case once && field == "":
+		return redact.Secret{}, Invalidf("a once-only value is taken by its field's name, such as backup_codes")
+	case once:
+		held, err = m.cfg.Credentials.RedeemOnce(ctx, leaseID, credHolder(envID), field)
+	default:
+		held, err = m.cfg.Credentials.Redeem(ctx, leaseID, credHolder(envID))
+	}
 	if err != nil {
 		return redact.Secret{}, err
 	}
@@ -281,12 +349,12 @@ func (m *Manager) LoginSecret(ctx context.Context, envID, leaseID, field string)
 		return redact.Secret{}, Invalidf("lease %s is for the use %s, which is not typed: lease the credential for %s",
 			leaseID, held.Use, envspec.UseLogin)
 	}
-	if field == "" {
-		field = defaultField(held.Kind)
+	if field, err = fieldOf(held, field); err != nil {
+		return redact.Secret{}, err
 	}
-	value, ok := m.learn(held)[field]
-	if !ok || value.Reveal() == "" {
-		return redact.Secret{}, Invalidf("credential %s has no %q field to type", held.Cred, field)
+	value := m.learn(held)[field]
+	if value.Reveal() == "" || slices.Contains(held.Base64, field) {
+		return redact.Secret{}, Invalidf("credential %s: %q is not something to type", held.Cred, field)
 	}
 	return value, nil
 }

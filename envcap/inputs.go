@@ -24,7 +24,8 @@ type androidInputIn struct {
 type typeSecretIn struct {
 	Env   string `json:"env" jsonschema:"environment id (env_…) from env.provision, env.list or env.status"`
 	Lease string `json:"lease" jsonschema:"credential lease id (lease_…) from core.credentials.lease, held by env:<env>"`
-	Field string `json:"field,omitempty" jsonschema:"secret field to type; password when left out, api_key for an api-key"`
+	Field string `json:"field,omitempty" jsonschema:"secret field to type, as core.credentials.list gives it under delivers: password, totp_code (the one-time code of the moment), api_key. Left out: the password, or the only field the credential delivers"`
+	Once  bool   `json:"once,omitempty" jsonschema:"take one value of a once-only field, such as backup_codes: it is typed and then gone from the credential. Needs field"`
 }
 
 type fridaHookIn struct {

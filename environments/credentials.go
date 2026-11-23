@@ -9,6 +9,7 @@ import "github.com/craggy-io/environment-services/internal/core"
 //
 //	Hold(ctx, CredentialRequest) (CredentialLease, error)
 //	Redeem(ctx, lease, holder string) (HeldCredential, error)
+//	RedeemOnce(ctx, lease, holder, field string) (HeldCredential, error)
 //	RedeemHolder(ctx, holder string) ([]HeldCredential, error)
 //	Drop(ctx, holders []string) error
 //

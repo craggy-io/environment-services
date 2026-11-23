@@ -47,7 +47,7 @@ type Manager interface {
 	// Android devices & secret typing. The secret value behind
 	// TypeSecret never crosses this interface.
 	Android(id string) (AndroidDevice, error)
-	TypeSecret(ctx context.Context, envID, leaseID, field string) error
+	TypeSecret(ctx context.Context, envID, leaseID, field string, once bool) error
 
 	// Signals.
 	Streams(envID string) []StreamInfo

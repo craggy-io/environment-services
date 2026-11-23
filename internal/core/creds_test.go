@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
@@ -24,6 +25,7 @@ type fakeCreds struct {
 	leases  []CredentialLease
 	seq     int
 	refuse  error // what Hold answers, when set
+	once    map[string][]string // by "credential field": values handed over once each
 	dropped [][]string
 }
 
@@ -63,7 +65,29 @@ func (f *fakeCreds) Hold(ctx context.Context, req CredentialRequest) (Credential
 }
 
 func (f *fakeCreds) held(l CredentialLease) HeldCredential {
-	return HeldCredential{CredentialLease: l, Secret: f.secrets[l.Cred].Secret}
+	return HeldCredential{CredentialLease: l, Secret: f.secrets[l.Cred].Secret, Base64: f.secrets[l.Cred].Base64}
+}
+
+// RedeemOnce hands over the next of the credential's once-only values of
+// field, and forgets it.
+func (f *fakeCreds) RedeemOnce(ctx context.Context, lease, holder, field string) (HeldCredential, error) {
+	held, err := f.Redeem(ctx, lease, holder)
+	if err != nil {
+		return HeldCredential{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	left := f.once[held.Cred+" "+field]
+	if len(left) == 0 {
+		return HeldCredential{}, fmt.Errorf("%w: no %s left", envspec.ErrNotFound, field)
+	}
+	f.once[held.Cred+" "+field] = left[1:]
+	secret := map[string]string{field: left[0]}
+	for name, value := range held.Secret {
+		secret[name] = value
+	}
+	held.Secret = secret
+	return held, nil
 }
 
 func (f *fakeCreds) Redeem(ctx context.Context, lease, holder string) (HeldCredential, error) {
@@ -120,11 +144,22 @@ func (f *fakeCreds) leasesOf(holder string) []CredentialLease {
 
 const testSecret = "Correct Horse 42!"
 
+const testKubeconfig = "apiVersion: v1\nusers:\n- user: {token: kube-token-55}\n"
+
+var testKeystore = []byte{0xfe, 0xed, 0x00, 0x01, 0xff, 'k', 's'}
+
 func newFakeCreds() *fakeCreds {
 	return &fakeCreds{secrets: map[string]HeldCredential{
 		"cred_key":  {CredentialLease: CredentialLease{Kind: "api-key"}, Secret: map[string]string{"api_key": testSecret}},
 		"cred_acct": {CredentialLease: CredentialLease{Kind: "google.account"}, Secret: map[string]string{"password": "Battery Staple 7?"}},
-	}}
+		// An account with a second step delivers the code of the moment.
+		"cred_2fa": {CredentialLease: CredentialLease{Kind: "google.account"}, Secret: map[string]string{"password": "pw", "totp_code": "287082"}},
+		// A keystore: a binary file as base64, and its password.
+		"cred_store": {CredentialLease: CredentialLease{Kind: "android.keystore"}, Base64: []string{"keystore"},
+			Secret: map[string]string{"keystore": base64.StdEncoding.EncodeToString(testKeystore), "store_password": "store-pw-91"}},
+		"cred_kube": {CredentialLease: CredentialLease{Kind: "kubeconfig"}, Base64: []string{"config"},
+			Secret: map[string]string{"config": base64.StdEncoding.EncodeToString([]byte(testKubeconfig))}},
+	}, once: map[string][]string{"cred_2fa backup_codes": {"1111 2222", "3333 4444"}}}
 }
 
 func credsConfig(dir string, creds *fakeCreds, adapters ...adapter.Adapter) Config {
@@ -319,25 +354,95 @@ func TestLoginSecretChecksHolderAndUse(t *testing.T) {
 		return l.ID
 	}
 	login := hold("cred_acct", envspec.UseLogin, "env:env_a")
-	secret, err := m.LoginSecret(ctx, "env_a", login, "")
+	secret, err := m.LoginSecret(ctx, "env_a", login, "", false)
 	if err != nil || secret.Reveal() != "Battery Staple 7?" {
 		t.Fatalf("LoginSecret = %v, %v", secret, err)
 	}
 	if strings.Contains(m.redact("typed Battery Staple 7?"), "Battery") {
 		t.Fatal("a typed secret is not redacted")
 	}
-	if _, err := m.LoginSecret(ctx, "env_b", login, ""); !errors.Is(err, envspec.ErrNotFound) {
+	if _, err := m.LoginSecret(ctx, "env_b", login, "", false); !errors.Is(err, envspec.ErrNotFound) {
 		t.Fatalf("a lease another environment holds: %v", err)
 	}
-	if _, err := m.LoginSecret(ctx, "env_a", login, "pin"); !errors.Is(err, envspec.ErrInvalid) {
+	if _, err := m.LoginSecret(ctx, "env_a", login, "pin", false); !errors.Is(err, envspec.ErrInvalid) {
 		t.Fatalf("a field the credential lacks: %v", err)
 	}
 	inject := hold("cred_key", envspec.UseInject, "env:env_a")
-	if _, err := m.LoginSecret(ctx, "env_a", inject, ""); !errors.Is(err, envspec.ErrInvalid) || !strings.Contains(err.Error(), envspec.UseInject) {
+	if _, err := m.LoginSecret(ctx, "env_a", inject, "", false); !errors.Is(err, envspec.ErrInvalid) || !strings.Contains(err.Error(), envspec.UseInject) {
 		t.Fatalf("a lease taken for %s: %v", envspec.UseInject, err)
 	}
 	account := hold("cred_acct", envspec.UseAndroidAccount, "env:env_a")
-	if _, err := m.LoginSecret(ctx, "env_a", account, "password"); err != nil {
+	if _, err := m.LoginSecret(ctx, "env_a", account, "password", false); err != nil {
 		t.Fatalf("a lease taken for %s: %v", envspec.UseAndroidAccount, err)
+	}
+}
+
+// A file's content is delivered decoded, binary or not, and a file that
+// is text is scrubbed from output; a credential that delivers several
+// fields and no password needs the field named.
+func TestFilesAreDeliveredDecodedAndTheFieldIsNamed(t *testing.T) {
+	world := envtestfake.NewWorld()
+	creds := newFakeCreds()
+	m := openMgr(t, credsConfig(t.TempDir(), creds, envtestfake.NewCreated(world, envspec.Container)))
+	h, err := m.Provision(inCall(), ownerA, envspec.Spec{Profile: "fake", Creds: []envspec.CredRequest{
+		{Cred: "cred_store", Deliver: "file:/keys/release.jks", Field: "keystore"},
+		{Cred: "cred_store", Deliver: "env:STORE_PASSWORD", Field: "store_password"},
+		{Cred: "cred_kube", Deliver: "file:/root/.kube/config"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := world.Get(adapter.NameFor(h.EnvID))
+	files := res.Files()
+	if got := files["/keys/release.jks"]; string(got) != string(testKeystore) {
+		t.Fatalf("the keystore was written as %v", got)
+	}
+	if got := files["/root/.kube/config"]; string(got) != testKubeconfig {
+		t.Fatalf("the kubeconfig was written as %q", got)
+	}
+	if got := res.InjectedEnv()["STORE_PASSWORD"]; got != "store-pw-91" {
+		t.Fatalf("STORE_PASSWORD = %q", got)
+	}
+	if got := m.redact("cat: " + testKubeconfig); strings.Contains(got, "kube-token-55") {
+		t.Fatalf("a delivered text file is not scrubbed: %q", got)
+	}
+	for name, req := range map[string]envspec.CredRequest{
+		"several fields and none named": {Cred: "cred_store", Deliver: "file:/x"},
+		"a binary file as a variable":   {Cred: "cred_store", Deliver: "env:KEYSTORE", Field: "keystore"},
+		"a field it doesn't deliver":    {Cred: "cred_kube", Deliver: "file:/x", Field: "token"},
+	} {
+		if _, err := m.Provision(inCall(), ownerA, envspec.Spec{Profile: "fake", Creds: []envspec.CredRequest{req}}); !errors.Is(err, envspec.ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// A one-time code is typed by its field's name, and a backup code is
+// taken once and then gone.
+func TestACodeIsTypedAndABackupCodeIsTakenOnce(t *testing.T) {
+	world := envtestfake.NewWorld()
+	creds := newFakeCreds()
+	m := openMgr(t, credsConfig(t.TempDir(), creds, envtestfake.NewCreated(world, envspec.Container)))
+	ctx := inCall()
+	lease, err := creds.Hold(ctx, CredentialRequest{Cred: "cred_2fa", Use: envspec.UseLogin, Holder: "env:env_a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.LoginSecret(ctx, "env_a", lease.ID, "", false); err != nil || got.Reveal() != "pw" {
+		t.Fatalf("with no field named: %v, %v", got, err)
+	}
+	if got, err := m.LoginSecret(ctx, "env_a", lease.ID, "totp_code", false); err != nil || got.Reveal() != "287082" {
+		t.Fatalf("the one-time code: %v, %v", got, err)
+	}
+	for _, want := range []string{"1111 2222", "3333 4444"} {
+		if got, err := m.LoginSecret(ctx, "env_a", lease.ID, "backup_codes", true); err != nil || got.Reveal() != want {
+			t.Fatalf("a backup code: %v, %v, want %s", got, err, want)
+		}
+	}
+	if _, err := m.LoginSecret(ctx, "env_a", lease.ID, "backup_codes", true); !errors.Is(err, envspec.ErrNotFound) {
+		t.Fatalf("a third backup code: %v", err)
+	}
+	if _, err := m.LoginSecret(ctx, "env_a", lease.ID, "", true); !errors.Is(err, envspec.ErrInvalid) {
+		t.Fatalf("a once-only value with no field named: %v", err)
 	}
 }

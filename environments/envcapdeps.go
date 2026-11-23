@@ -253,12 +253,12 @@ func (d *EnvCapDeps) Manifest(ctx context.Context, id, root string) ([]envspec.E
 // Android device's focused input. The lease is named by ID and must be
 // held by the environment; the manager redeems it through its
 // credentials port, so no secret value crosses this surface.
-func (d *EnvCapDeps) TypeSecret(ctx context.Context, envID, leaseID, field string) error {
+func (d *EnvCapDeps) TypeSecret(ctx context.Context, envID, leaseID, field string, once bool) error {
 	dev, err := d.m.Android(envID)
 	if err != nil {
 		return xlate(err)
 	}
-	secret, err := d.m.core.LoginSecret(ctx, envID, leaseID, field)
+	secret, err := d.m.core.LoginSecret(ctx, envID, leaseID, field, once)
 	if err != nil {
 		return xlate(err)
 	}
