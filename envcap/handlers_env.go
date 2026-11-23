@@ -82,7 +82,6 @@ func (s *set) build() []capability {
 		Input:       inputSchema[envIDIn](), Handler: s.handleSnapshotList})
 
 	caps = append(caps, s.buildAndroid()...)
-	caps = append(caps, s.buildVault()...)
 	caps = append(caps, s.buildSignals()...)
 	caps = append(caps, s.buildRules()...)
 	add(capability{Name: "host.status", Version: 1, Effects: "readonly", Tags: []string{"agent"},
@@ -178,16 +177,6 @@ func (s *set) handleStatus(ctx context.Context, call *call) (any, error) {
 	}
 	if len(trigs) > 0 {
 		out["recent_triggers"] = trigs
-	}
-	if leases, err := s.deps.Manager.ListCredLeases(ctx); err == nil {
-		var ls []map[string]any
-		for _, l := range leases {
-			heldByEnv := strings.HasPrefix(l.Holder, "env:") && seen[strings.TrimPrefix(l.Holder, "env:")]
-			if heldByEnv || in.Env == "" && l.Owner == owner.ID {
-				ls = append(ls, map[string]any{"lease": l.Lease, "kind": l.Kind, "holder": l.Holder})
-			}
-		}
-		out["cred_leases"] = ls
 	}
 	return out, nil
 }

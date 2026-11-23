@@ -64,7 +64,8 @@ with backoff, and run history (start, stop, failure) backs coverage answers.
 
 The recorder redacts before fan-out and storage: byte payloads that contain
 a known secret are flagged and their data withheld from segment files, and
-structured payloads are scrubbed through the vault redactor. Segment files
+structured payloads are scrubbed through the redactor, which knows the
+secrets the manager has redeemed for live environments. Segment files
 also carry loss accounting (sequence gaps, drops, restarts) as first-class
 metadata so a reader can always tell evidence from absence.
 

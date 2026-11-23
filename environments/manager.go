@@ -12,7 +12,7 @@ import (
 // Close stops the manager. ShutdownDrain releases every live
 // environment first (bounded by ctx; unfinished releases remain
 // durable operations the next Open resumes); ShutdownDisconnect
-// leaves resources running. The signal hub, vault and host sampler
+// leaves resources running. The signal hub and host sampler
 // stop with the manager. Close is idempotent.
 func (m *Manager) Close(ctx context.Context, mode ShutdownMode) error {
 	m.closeOnce.Do(func() {
@@ -22,9 +22,6 @@ func (m *Manager) Close(ctx context.Context, mode ShutdownMode) error {
 		}
 		m.closeErr = m.core.Close(ctx, cm)
 		m.hub.Close()
-		if err := m.vault.Close(); m.closeErr == nil {
-			m.closeErr = err
-		}
 		m.cancelMon()
 	})
 	return m.closeErr
@@ -154,6 +151,17 @@ func (m *Manager) Observation() Observation { return &observation{m: m} }
 func (m *Manager) HostSnapshot() envspec.HostSnapshot {
 	s, _ := m.mon.Latest()
 	return s
+}
+
+// SyncCredentials does the credential work that waits for a call: it ends
+// the leases of environments released while none was being served (the
+// reaper, a lost environment), and gives environments reopened after a
+// restart their variables and files back and the redactor their secrets.
+// Call it with the context of each call the application serves, before
+// the call's own work. It is cheap when nothing waits, and an error
+// leaves the work for the next call.
+func (m *Manager) SyncCredentials(ctx context.Context) error {
+	return m.core.SyncCredentials(ctx)
 }
 
 // RedactString scrubs known secret values from s. Use it on any

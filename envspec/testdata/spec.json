@@ -17,8 +17,8 @@
         "a": "b"
       },
       "deliver": "env:TOKEN",
-      "field": "token",
-      "require_sticky": true
+      "use": "env.inject",
+      "field": "token"
     }
   ],
   "signals": [

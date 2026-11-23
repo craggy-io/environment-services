@@ -61,16 +61,6 @@ type Manager interface {
 	SignalCoverage(sel envspec.Selector, from, to time.Time) []envspec.Coverage
 	CaptureSignals(sel envspec.Selector, where map[string]any, from, to time.Time) (Capture, error)
 
-	// Credentials. No secret value ever crosses this interface
-	// except into PutCred, the one way secrets enter.
-	ListCreds(ctx context.Context) ([]CredView, error)
-	LeaseCred(ctx context.Context, req LeaseCredRequest) (CredLease, error)
-	ReleaseCredLease(ctx context.Context, leaseID string) error
-	ListCredLeases(ctx context.Context) ([]CredLease, error)
-	PutCred(ctx context.Context, in CredInput) (string, error)
-	DeleteCred(ctx context.Context, cred string) error
-	SetCredPolicy(ctx context.Context, cred string, p CredPolicy) error
-
 	// Rules.
 	LoadRule(ctx context.Context, source []byte, codeRef string, params map[string]any) (string, error)
 	UnloadRule(id string) error
@@ -177,63 +167,6 @@ type Capture interface {
 	Source() envspec.Source
 	Events() ([]envspec.SignalEvent, envspec.Quality, error)
 	Close()
-}
-
-// CredView is the agent-visible credential summary: public fields,
-// labels and availability — never secrets.
-type CredView struct {
-	ID        string            `json:"id"`
-	Kind      string            `json:"kind"`
-	Name      string            `json:"name"`
-	Public    map[string]string `json:"public,omitempty"`
-	Labels    map[string]string `json:"labels,omitempty"`
-	Available bool              `json:"available"`
-	Reason    string            `json:"reason,omitempty"`
-}
-
-// CredPolicy is a credential's lease policy.
-type CredPolicy struct {
-	MaxConcurrent int           `json:"max_concurrent,omitempty"`
-	Cooldown      time.Duration `json:"cooldown,omitempty"`
-	MaxPerDay     int           `json:"max_per_day,omitempty"`
-	HolderKinds   []string      `json:"holder_kinds,omitempty"`
-	Owners        []string      `json:"owners,omitempty"`
-	Sticky        bool          `json:"sticky,omitempty"`
-	OnePerHolder  string        `json:"one_per_holder,omitempty"`
-}
-
-// LeaseCredRequest leases one credential by id or by selector.
-type LeaseCredRequest struct {
-	Cred       string
-	Kind       string
-	Labels     map[string]string
-	Holder     string
-	HolderKind string
-	Owner      string
-	Purpose    string
-	TTL        time.Duration
-}
-
-// CredLease is one live credential lease (public view only).
-type CredLease struct {
-	Lease  string
-	Cred   string
-	Kind   string
-	Holder string
-	Owner  string
-	Public map[string]string
-}
-
-// CredInput creates or replaces a credential. Secret is write-only:
-// it is stored, never returned.
-type CredInput struct {
-	ID     string
-	Kind   string
-	Name   string
-	Public map[string]string
-	Secret map[string]string
-	Labels map[string]string
-	Policy CredPolicy
 }
 
 // RuleInfo is one loaded rule instance.

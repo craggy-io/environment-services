@@ -2,13 +2,11 @@ package environments
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/craggy-io/environment-services/envcap"
 	"github.com/craggy-io/environment-services/envspec"
 	"github.com/craggy-io/environment-services/internal/core"
-	"github.com/craggy-io/environment-services/internal/vault"
 	"github.com/craggy-io/environment-services/internal/xfer"
 )
 
@@ -251,26 +249,18 @@ func (d *EnvCapDeps) Manifest(ctx context.Context, id, root string) ([]envspec.E
 	return d.m.core.Manifest(ctx, h, root)
 }
 
-// TypeSecret types one leased secret field into an Android device's
-// focused input. The lease is named by ID and the value is revealed
-// only inside the vault lease's Use callback, so no secret value
-// crosses this surface.
+// TypeSecret types one secret field of a leased credential into an
+// Android device's focused input. The lease is named by ID and must be
+// held by the environment; the manager redeems it through its
+// credentials port, so no secret value crosses this surface.
 func (d *EnvCapDeps) TypeSecret(ctx context.Context, envID, leaseID, field string) error {
 	dev, err := d.m.Android(envID)
 	if err != nil {
 		return xlate(err)
 	}
-	lease, err := d.m.vault.LeaseByID(ctx, leaseID)
+	secret, err := d.m.core.LoginSecret(ctx, envID, leaseID, field)
 	if err != nil {
 		return xlate(err)
 	}
-	if field == "" {
-		field = "password"
-	}
-	return xlate(lease.Use(field, func(s vault.Secret) error {
-		if s.Reveal() == "" {
-			return fmt.Errorf("%w: credential has no %q field to type", envspec.ErrInvalid, field)
-		}
-		return dev.Text(ctx, s.Reveal())
-	}))
+	return xlate(dev.Text(ctx, secret.Reveal()))
 }

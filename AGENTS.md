@@ -23,7 +23,8 @@ projections, shims or deprecation.
 | A runtime (docker, host, android emulator/physical) | `internal/adapters/*` behind `internal/adapter` |
 | Signal hub, recorder, ranges | `internal/signalcore` (each adapter owns its collectors) |
 | Starlark signal rules | `internal/rules` on script-services |
-| Credential leasing and redaction | `internal/vault` (`Secret.Reveal` never leaves `internal/`) |
+| Credential delivery (lease through the port, deliver, end with the environment) | `internal/core/creds.go` behind `environments.Credentials`; the library keeps no credential |
+| Secret redaction | `internal/redact` (`Secret.Reveal` never leaves `internal/`; the redactor knows only what the manager redeemed) |
 | File-tree transfer | `internal/xfer` (tar, manifests, delta); runtimes move tar through `adapter.Transferrer` (Android: device `tar` over adb) |
 
 Public surface is exactly `envspec`, `environments`, `envcap` (production)

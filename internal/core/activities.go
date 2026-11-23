@@ -299,10 +299,7 @@ func (a *activityEngine) runPresence(ctx context.Context, e store.Env, r *runtim
 				Name: "reachable", Status: envspec.ConditionFalse, Reason: ReasonNotFound, ObservedAt: now})
 			if fresh.Phase == envspec.StatePresent {
 				_, _ = m.store.MarkFailed(fresh, "", "environment lost: resource absent", now)
-				if m.cfg.Vault != nil {
-					_ = m.cfg.Vault.ReleaseHolder(m.ctx, "env:"+e.ID)
-					m.refreshRedactor()
-				}
+				_, _ = m.endCreds(m.ctx, e.ID)
 				m.dropRuntime(e.ID, ErrEnvironmentLost)
 			}
 			a.finish(act, nil, false)

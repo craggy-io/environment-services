@@ -2,7 +2,7 @@
 
 `envcap` projects a manager into a
 [`capability-services`](https://github.com/craggy-io/capability-services)
-registry: `Capabilities(Deps)` returns `registry.Capability` values (39,
+registry: `Capabilities(Deps)` returns `registry.Capability` values (33,
 grouped by `Groups()`), ready for `Registry.Add`/`AddGroup`, so every
 registry projection (HTTP, MCP, tools, Starlark) sees the same surface.
 
@@ -10,7 +10,7 @@ Import path: `github.com/craggy-io/environment-services/envcap`.
 
 **Trust boundary:** envcap sits *inside* it. `Deps.Manager` deliberately
 includes operations the consumer facade hides — borrows, by-ID
-exec/transfer, credential administration, secret typing — because the host
+exec/transfer, secret typing — because the host
 assembling envcap has decided its callers may do these things. Map callers
 to owners only through `Deps.Owner` (trusted invocation context), never
 from capability arguments. envcap does not import `environments`; wire it
@@ -19,14 +19,13 @@ structurally (compile-time asserted in `environments`). envcap imports no
 Starlark: hosts assemble a Starlark surface themselves
 (capability-services' `starlarkcap`).
 
-## The 39 capabilities
+## The 33 capabilities
 
 | Group | Capabilities |
 | --- | --- |
 | `env` | `env.status`, `env.profiles.list`, `env.provision`, `env.attach`, `env.list`, `env.get`, `env.release`, `env.keepalive`, `env.exec`, `env.fs.list`, `env.fs.stat`, `env.push`, `env.pull`, `env.snapshot.save`, `env.snapshot.load`, `env.snapshot.list` |
 | `env.android` | `env.android.install`, `env.android.screenshot`, `env.android.input`, `env.android.type-secret`, `env.android.frida.hook` |
 | `host` | `host.status` |
-| `vault` | `vault.creds.list`, `vault.lease`, `vault.release`, `vault.creds.put` (admin), `vault.creds.delete` (admin), `vault.creds.policy.set` (admin) |
 | `signals` | `signals.streams.list`, `signals.query`, `signals.tail`, `signals.pin`, `signals.unpin`, `signals.capture` |
 | `rules` | `rules.load`, `rules.unload`, `rules.list`, `rules.test`, `rules.triggers.wait` |
 
@@ -79,4 +78,11 @@ results):
 
 `env.android.type-secret` is the one secret-moving capability: it types a
 leased credential field into a device, and the secret value never appears in
-inputs, outputs or logs — it stays inside the vault's use callback.
+inputs, outputs or logs. envcap serves no credential store: the lease id
+comes from the application's own (`core.credentials.lease` in the harness),
+taken for the use `env.login` or `env.android.account` with the holder
+`env:<environment id>`. The manager redeems it through its credentials port
+([environments](environments.md#credentials)) and refuses a lease taken for
+`env.inject` or held by anything else. `env.provision`'s `creds` lease and
+deliver the same way; `env.status` reports no credential leases, which are
+the store's to list.

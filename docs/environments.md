@@ -1,9 +1,9 @@
 # environments
 
 `environments` is the one assembly and manager package. `Open` builds the
-whole stack over a state directory — host sampler, credential vault, signal
+whole stack over a state directory — host sampler, secret redactor, signal
 hub and recorder, rule engine, runtime adapters, durable core — and `Manager`
-is the entire consumer-facing lifecycle surface (23 methods, pinned by
+is the entire consumer-facing lifecycle surface (24 methods, pinned by
 `TestManagerMethodSet`).
 
 Import path: `github.com/craggy-io/environment-services/environments`.
@@ -32,7 +32,63 @@ ownership label; empty mints a fresh ID per Open. `MutationPolicy` gates
 autonomous repair/reap (nil allows all); `Profiles` adds to the stock set
 (`host-tools`, `linux-tools`, `android`, `android-play`,
 `android-play-rooted`) and the user profiles (see [Profiles](#profiles));
-`HostSampler` overrides host sampling in tests.
+`HostSampler` overrides host sampling in tests. `Credentials` is the port to
+the application's credential store (see [Credentials](#credentials)); nil
+makes a spec with `Creds`, and typing a secret, unavailable.
+
+## Credentials
+
+The manager keeps no credential. The application implements
+`environments.Credentials` over its own store and sets it as
+`Config.Credentials`:
+
+```go
+type Credentials interface {
+	Hold(ctx context.Context, req CredentialRequest) (CredentialLease, error)
+	Redeem(ctx context.Context, lease, holder string) (HeldCredential, error)
+	RedeemHolder(ctx context.Context, holder string) ([]HeldCredential, error)
+	Drop(ctx context.Context, holders []string) error
+}
+```
+
+A holder is `env:<environment id>`. Every lease names a use, one of three
+the application declares to its store, and the delivery of an
+`envspec.CredRequest` decides which:
+
+| Use (`envspec`) | Delivery | What it does |
+| --- | --- | --- |
+| `UseAndroidAccount` `env.android.account` | `account`, or `type` with `use` set | Signs an Android device or emulator in to the account. |
+| `UseLogin` `env.login` | `type` (the default), `env.android.type-secret` | Typed into a sign-in form or field inside an environment. |
+| `UseInject` `env.inject` | `env:NAME`, `file:/path` | Handed to the environment's processes as a variable or a file, where whoever runs commands there can read it. |
+
+Provisioning a spec with `Creds` calls `Hold` for each request, then
+`Redeem` and delivers; a `type` request is only held, and redeemed when it
+is typed. The use of a redeemed lease is checked against the delivery every
+time, so a lease taken for typing is never written into a variable or a
+file, and the reverse. Each redeemed secret is taught to the redactor for
+as long as its holder lives.
+
+The port is called with the context of the work it is part of. The
+manager's own background work (the reaper releasing an expired
+environment, recovery at Open) belongs to no call the application could
+act under, so the port returns `ErrNoCall` there and the manager defers:
+
+- **Ending leases.** Release queues the holder in the state database, then
+  calls `Drop`; the holder leaves the queue only when `Drop` succeeds.
+- **After a restart.** Nothing is redeemed at Open. A reopened environment
+  gets its variables and files back, and the redactor its secrets, from
+  `RedeemHolder`.
+
+Both happen in `Manager.SyncCredentials(ctx)`, which the application calls
+with the context of each call it serves, before the call's own work. It is
+cheap when nothing waits. A provision the manager resumes by itself after a
+crash can't lease, so one with `Creds` fails and is released: provision
+again.
+
+Port errors pass through to the caller. Wrap `envspec.ErrNotFound`,
+`environments.ErrCredentialUnavailable` (the store's limits refuse the lease
+for now; envcap answers `unavailable`) or `environments.ErrCredentialDenied`
+(the credential may not be put to that use; `denied`).
 
 ## Profiles
 
@@ -114,7 +170,7 @@ renewal ticker.
 - `Profiles`, `Profile`, `ProfileStatus` (`Ready`/`NotReady` says why not),
   `StockProfiles`, `EnsureProfileBackend`, `BuildDigest`, `Drivers`,
   `HostSnapshot`, `ManagerID`.
-- `RedactString` scrubs known secrets from a string (the vault redactor).
+- `RedactString` scrubs the secrets the manager is delivering from a string.
 
 There is deliberately no overview/aggregation struct: render from
 `Profiles`/`List`/`EventsSince`/`HostSnapshot` (plus envcap JSON where a
@@ -127,9 +183,9 @@ manager owns: `Shell`/`RootShell` (device-shell strings, unlike argv-only
 `Handle.Exec`), `Install`/`Uninstall`/`StartApp`/`ForceStop`,
 `Tap`/`Swipe`/`KeyEvent`/`Text`, `PackageSnapshot`,
 `ApplyPackageSequenceAndAction`, `BackupToLocalTransport`, `Logcat`,
-`Screenshot`. Typing a vault secret into a device is intentionally **not**
+`Screenshot`. Typing a leased secret into a device is intentionally **not**
 on this interface; it exists only inside the capability surface, where the
-secret never leaves the vault.
+manager redeems the lease and the value crosses no capability.
 
 `StartTLSChallenge(ctx, envspec.TLSChallengeOptions)` and
 `StartCleartextChallenge(ctx, envspec.CleartextChallengeOptions)` start a

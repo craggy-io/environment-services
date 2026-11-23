@@ -25,7 +25,7 @@ func TestManagerMethodSet(t *testing.T) {
 		"HostSnapshot", "List", "ManagerID", "Observation", "Profile",
 		"ProfileStatus", "Profiles", "Provision", "RecentEvents",
 		"RedactString", "Release", "RenewLease", "StockProfiles",
-		"StopService",
+		"StopService", "SyncCredentials",
 	}
 	typ := reflect.TypeOf(&environments.Manager{})
 	var got []string
@@ -332,7 +332,7 @@ func TestEnvCapDepsSurface(t *testing.T) {
 		t.Fatalf("deps.CloseJob: %v", err)
 	}
 	// TypeSecret against a host env refuses (not an Android device)
-	// before touching the vault.
+	// before redeeming anything.
 	if err := deps.TypeSecret(ctx, h.ID(), "lease_missing", "password"); err == nil {
 		t.Fatal("deps.TypeSecret(host env) succeeded")
 	}

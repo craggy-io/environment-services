@@ -90,14 +90,33 @@ type HostOptions struct {
 	Env  map[string]string `json:"env,omitempty"`  // added to every Exec; "${VAR}" expands
 }
 
-// CredRequest names a credential to lease and inject at provision.
+// The uses the manager puts a credential to. A lease names one, and the
+// application's credential store keeps its grants and limits per use, so
+// the application declares exactly these to it.
+const (
+	// UseAndroidAccount signs an Android device or emulator in to the
+	// account: the "account" delivery.
+	UseAndroidAccount = "env.android.account"
+	// UseLogin types the secret into a sign-in form or field inside an
+	// environment: the "type" delivery.
+	UseLogin = "env.login"
+	// UseInject hands the secret to the processes of the environment as
+	// a variable or a file, where whoever runs commands there can read
+	// it: the "env:NAME" and "file:/path" deliveries.
+	UseInject = "env.inject"
+)
+
+// CredRequest names a credential to lease and deliver at provision.
 type CredRequest struct {
-	Cred          string            `json:"cred,omitempty"`   // credential ID, or empty to select
-	Kind          string            `json:"kind,omitempty"`   // selector kind
-	Labels        map[string]string `json:"labels,omitempty"` // selector labels
-	Deliver       string            `json:"deliver"`          // "env:NAME", "file:/path", "account", "type"
-	Field         string            `json:"field,omitempty"`  // secret field for env/file delivery
-	RequireSticky bool              `json:"require_sticky,omitempty"`
+	Cred    string            `json:"cred,omitempty"`   // credential ID, or empty to select
+	Kind    string            `json:"kind,omitempty"`   // selector kind
+	Labels  map[string]string `json:"labels,omitempty"` // selector labels
+	Deliver string            `json:"deliver"`          // "env:NAME", "file:/path", "account", "type"
+	// Use is what the lease is for. The delivery decides it (env and
+	// file: UseInject; account: UseAndroidAccount), so it is only said
+	// for "type", which is UseLogin unless this says UseAndroidAccount.
+	Use   string `json:"use,omitempty"`
+	Field string `json:"field,omitempty"` // secret field for env/file delivery
 }
 
 // SignalRequest pins a collector from boot. Required pins block readiness

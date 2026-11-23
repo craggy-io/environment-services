@@ -21,8 +21,9 @@ states are stored and reported separately.
 ## Durability in one paragraph
 
 One SQLite file holds five tables plus the event log (`envs`, `operations`,
-`leases`+`borrows`, `conditions`, `activities`, `events`); the vault keeps
-its own file. Every state change is a typed conditional transition
+`leases`+`borrows`, `conditions`, `activities`, `events`) and the queue of
+credential holders whose leases are still to be ended (`cred_drops`); no
+credential is kept. Every state change is a typed conditional transition
 (`… WHERE id=? AND revision=?`, else `ErrConflict`), and a failed durable
 write closes admission rather than proceeding on volatile state. Provision
 persists env + operation + lease **before** dispatching; resources are
@@ -31,7 +32,9 @@ named deterministically from the env ID (`craggy-<envID>`, docker labels
 external action and its record is recoverable by rediscovery. Handles are
 issued last, after admission → create/attach → identity verify → credentials
 → required activities acked. Release records intent, then stops activities,
-releases vault leases, destroys or disconnects, and completes only on
+ends the environment's credential leases through the port (queued for the
+next served call when none is in progress), destroys or disconnects, and
+completes only on
 verified absence — otherwise the operation stays pending with backoff and
 resumes across restarts. Idempotency is a unique `(owner_scope,
 request_key)` operation row whose request digest must match on retry.

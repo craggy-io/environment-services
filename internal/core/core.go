@@ -20,9 +20,9 @@ import (
 	"github.com/craggy-io/environment-services/envspec"
 	"github.com/craggy-io/environment-services/internal/adapter"
 	"github.com/craggy-io/environment-services/internal/hostmon"
+	"github.com/craggy-io/environment-services/internal/redact"
 	"github.com/craggy-io/environment-services/internal/signalcore"
 	"github.com/craggy-io/environment-services/internal/store"
-	"github.com/craggy-io/environment-services/internal/vault"
 	"github.com/craggy-io/foundation-kit/fsx"
 )
 
@@ -47,22 +47,20 @@ var defaultQuotas = []Quota{
 	{OwnerGlob: "agent:*", MaxContainers: 6, MaxAndroid: 2, MaxHost: 4, MaxPerSession: 8},
 }
 
-// AccountInjector delivers an "account" credential. It receives a
-// lease-checked handle and the vault lease; values stay inside Use.
-type AccountInjector func(ctx context.Context, h Handle, lease *vault.Lease) error
-
 // Config opens a Manager.
 type Config struct {
 	Dir       string
 	ManagerID string // random when empty
 	Adapters  []adapter.Adapter
-	Host      *hostmon.Monitor  // optional; nil disables measured admission
-	Vault     *vault.Vault      // optional; specs with Creds fail without it
-	Redactor  *vault.Redactor   // optional; refreshed when cred leases change
-	Signals   *signalcore.Hub   // optional; nil disables collector activities
-	Profiles  []envspec.Profile // beside stock and <Dir>/profiles; a duplicate name is an error
-	Quotas    []Quota
-	Clock     Clock
+	Host      *hostmon.Monitor // optional; nil disables measured admission
+	// Credentials is the port to the application's credential store.
+	// Optional; specs with Creds fail without it.
+	Credentials Credentials
+	Redactor    *redact.Redactor  // optional; taught each secret the manager redeems
+	Signals     *signalcore.Hub   // optional; nil disables collector activities
+	Profiles    []envspec.Profile // beside stock and <Dir>/profiles; a duplicate name is an error
+	Quotas      []Quota
+	Clock       Clock
 	// MutationPolicy gates autonomous repair/reap; nil allows all.
 	MutationPolicy envspec.MutationPolicy
 	Injectors      map[string]AccountInjector
@@ -103,12 +101,14 @@ type runtimeEnv struct {
 	inst       adapter.Instance
 	ad         adapter.Adapter
 
-	mu         sync.Mutex
-	credEnv    map[string]string
-	credLeases []string
-	lastObs    adapter.Observation
-	life       context.Context
-	cancelLife context.CancelCauseFunc
+	mu      sync.Mutex
+	credEnv map[string]string
+	// credsWaiting is set on a runtime reopened after a restart: what it
+	// held is redeemed again by the next SyncCredentials.
+	credsWaiting bool
+	lastObs      adapter.Observation
+	life         context.Context
+	cancelLife   context.CancelCauseFunc
 }
 
 func newRuntime(id string, gen int64, inst adapter.Instance, ad adapter.Adapter) *runtimeEnv {
@@ -147,6 +147,7 @@ type Manager struct {
 	backendStart chan struct{}
 	unwatch      []func()
 	provMu       sync.Mutex // serialises admission + provision insert
+	credSync     sync.Mutex // serialises SyncCredentials
 	warmMu       sync.Mutex
 	warming      map[string]bool
 
@@ -474,12 +475,6 @@ func (m *Manager) failureData(reason string, err error, extra map[string]any) ma
 	return data
 }
 
-func (m *Manager) refreshRedactor() {
-	if m.cfg.Redactor != nil && m.cfg.Vault != nil {
-		_ = m.cfg.Redactor.Refresh(m.cfg.Vault)
-	}
-}
-
 // recordComponentChange is the adapters' component sink.
 func (m *Manager) recordComponentChange(envID string, c adapter.ComponentChange) {
 	kind := ""
@@ -614,9 +609,7 @@ func (m *Manager) recoverEnv(ctx context.Context, e store.Env, ad adapter.Adapte
 			m.reopenRuntime(ctx, e, ad, ref, obs)
 		case adapter.Absent:
 			_, _ = m.store.MarkFailed(e, "", "environment lost: not found on reconcile", m.now())
-			if m.cfg.Vault != nil {
-				_ = m.cfg.Vault.ReleaseHolder(ctx, "env:"+e.ID)
-			}
+			_, _ = m.endCreds(ctx, e.ID)
 		case adapter.Unknown:
 			_, _ = m.store.SetPresence(e, store.PresenceUnknown, m.now())
 			m.reopenRuntime(ctx, e, ad, ref, obs) // probes keep trying; handles stay fenced by phase+lease
@@ -658,9 +651,10 @@ func (m *Manager) reopenRuntime(ctx context.Context, e store.Env, ad adapter.Ada
 	}
 	r := newRuntime(e.ID, e.Generation, inst, ad)
 	r.lastObs = obs
+	// What it held can be redeemed only under a call: SyncCredentials.
+	r.credsWaiting = m.cfg.Credentials != nil
 	m.putRuntime(r)
 	m.acts.declareForEnv(e, r)
-	m.rehydrateCreds(ctx, e, r)
 }
 
 func (m *Manager) openAcquireOp(e store.Env) store.Operation {
@@ -1053,13 +1047,9 @@ func (m *Manager) rematerialiseMissing(ctx context.Context) {
 }
 
 // ReconcileOnce drives one pass of durable work: pending operations
-// whose backoff expired, lease/borrow expiry, vault lease expiry and
-// warm-pool top-up. It is the op loop's body and is exported so tests
+// whose backoff expired, lease/borrow expiry and warm-pool top-up. It is the op loop's body and is exported so tests
 // can drive retries deterministically.
 func (m *Manager) ReconcileOnce(ctx context.Context) {
-	if m.cfg.Vault != nil {
-		_, _ = m.cfg.Vault.ExpireLeases(ctx)
-	}
 	m.rematerialiseMissing(ctx)
 	m.reapExpired(ctx)
 	ops, err := m.store.PendingOperations()

@@ -80,7 +80,7 @@ type Preflight interface {
 type HostOnly interface{ HostOnly() bool }
 
 // Redactor scrubs secret values from text payloads before publishing.
-// The vault's redactor implements it.
+// internal/redact's Redactor implements it.
 type Redactor interface {
 	Redact(stream string, data any) any
 	ContainsSecret(b []byte) bool

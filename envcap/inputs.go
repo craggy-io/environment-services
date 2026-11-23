@@ -2,7 +2,7 @@ package envcap
 
 import "encoding/json"
 
-// Input types of the android, vault, signals and rules capabilities.
+// Input types of the android, signals and rules capabilities.
 // Each is the capability's declared input schema (inputSchema) as
 // well as what its handler decodes, so the two cannot drift; the
 // env.* ones sit beside their handlers in handlers_env.go.
@@ -23,8 +23,8 @@ type androidInputIn struct {
 
 type typeSecretIn struct {
 	Env   string `json:"env" jsonschema:"environment id (env_…) from env.provision, env.list or env.status"`
-	Lease string `json:"lease" jsonschema:"credential lease id (lease_…) from vault.lease"`
-	Field string `json:"field" jsonschema:"secret field to type, e.g. password"`
+	Lease string `json:"lease" jsonschema:"credential lease id (lease_…) from core.credentials.lease, held by env:<env>"`
+	Field string `json:"field,omitempty" jsonschema:"secret field to type; password when left out, api_key for an api-key"`
 }
 
 type fridaHookIn struct {
@@ -34,39 +34,6 @@ type fridaHookIn struct {
 	Script               string `json:"script" jsonschema:"Frida JavaScript"`
 	Spawn                bool   `json:"spawn,omitempty" jsonschema:"spawn the package instead of attaching to it"`
 	CheckpointIntervalMS int    `json:"checkpoint_interval_ms,omitempty" jsonschema:"zero disables; 100..60000 polls the script checkpoint RPC with host timestamps and a 5 second deadline"`
-}
-
-type vaultLeaseIn struct {
-	Cred       string            `json:"cred,omitempty" jsonschema:"credential id; or select by kind and labels"`
-	Kind       string            `json:"kind,omitempty"`
-	Labels     map[string]string `json:"labels,omitempty"`
-	Holder     string            `json:"holder,omitempty" jsonschema:"who holds the lease when it is not for an environment"`
-	Env        string            `json:"env,omitempty" jsonschema:"environment the lease is for; it ends with the environment"`
-	Purpose    string            `json:"purpose,omitempty"`
-	TTLSeconds int               `json:"ttl_seconds,omitempty"`
-}
-
-type leaseIDIn struct {
-	Lease string `json:"lease" jsonschema:"credential lease id (lease_…)"`
-}
-
-type credPutIn struct {
-	ID     string            `json:"id,omitempty" jsonschema:"credential id to replace; omit to create one"`
-	Kind   string            `json:"kind"`
-	Name   string            `json:"name"`
-	Public map[string]string `json:"public,omitempty"`
-	Secret map[string]string `json:"secret"`
-	Labels map[string]string `json:"labels,omitempty"`
-	Policy CredPolicy        `json:"policy,omitzero"`
-}
-
-type credIDIn struct {
-	Cred string `json:"cred" jsonschema:"credential id"`
-}
-
-type policySetIn struct {
-	Cred   string     `json:"cred" jsonschema:"credential id"`
-	Policy CredPolicy `json:"policy"`
 }
 
 type streamsListIn struct {

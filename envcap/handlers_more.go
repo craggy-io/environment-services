@@ -128,7 +128,7 @@ func (s *set) buildAndroid() []capability {
 				return map[string]any{"env": in.Env, "sent": true}, nil
 			}},
 		{Name: "env.android.type-secret", Version: 1, Effects: "mutating", Tags: []string{"agent"},
-			Description: "Type a leased credential field into the focused field. You never see the value.",
+			Description: "Type one secret field of a leased credential into the focused field. You never see the value. The lease comes from core.credentials.lease, taken for the use " + envspec.UseLogin + " (or " + envspec.UseAndroidAccount + " to sign the device in to the account) with the holder env:<this environment's id>; a lease taken for " + envspec.UseInject + " is refused.",
 			Input:       inputSchema[typeSecretIn](),
 			Handler: func(ctx context.Context, call *call) (any, error) {
 				var in typeSecretIn
@@ -169,128 +169,6 @@ func (s *set) buildAndroid() []capability {
 				}
 				return map[string]any{"env": in.Env, "collector": col, "stream": "android.frida@1", "pin": pin.ID,
 					"hint": "signals.unpin {pin} stops the hook"}, nil
-			}},
-	}
-}
-
-func (s *set) buildVault() []capability {
-	return []capability{
-		{Name: "vault.creds.list", Version: 1, Effects: "readonly", Tags: []string{"agent"},
-			Description: "List credentials (public fields only) with lease availability.",
-			Handler: func(ctx context.Context, call *call) (any, error) {
-				if err := requireManager(s); err != nil {
-					return nil, err
-				}
-				views, err := s.deps.Manager.ListCreds(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return map[string]any{"creds": views}, nil
-			}},
-		{Name: "vault.lease", Version: 1, Effects: "mutating", Tags: []string{"agent"},
-			Description: "Lease a credential by id or selector {kind, labels} for an env/holder. Returns public fields, never secrets.",
-			Input:       inputSchema[vaultLeaseIn](),
-			Handler: func(ctx context.Context, call *call) (any, error) {
-				if err := requireManager(s); err != nil {
-					return nil, err
-				}
-				var in vaultLeaseIn
-				if err := decode(call, &in); err != nil {
-					return nil, err
-				}
-				owner, err := s.owner(ctx)
-				if err != nil {
-					return nil, err
-				}
-				holder := in.Holder
-				holderKind := ""
-				if in.Env != "" {
-					info, _, err := s.envOwned(ctx, in.Env)
-					if err != nil {
-						return nil, err
-					}
-					holder = "env:" + info.ID
-					holderKind = "env:" + string(info.Kind)
-				}
-				if holder == "" {
-					holder = owner.ID
-				}
-				req := LeaseCredRequest{Cred: in.Cred, Kind: in.Kind, Labels: in.Labels,
-					Holder: holder, HolderKind: holderKind, Owner: owner.ID, Purpose: in.Purpose}
-				if in.TTLSeconds > 0 {
-					req.TTL = time.Duration(in.TTLSeconds) * time.Second
-				}
-				lease, err := s.deps.Manager.LeaseCred(ctx, req)
-				if err != nil {
-					return nil, err
-				}
-				return map[string]any{"lease": lease.Lease, "public": lease.Public, "kind": lease.Kind}, nil
-			}},
-		{Name: "vault.release", Version: 1, Effects: "mutating", Tags: []string{"agent"},
-			Description: "Release a credential lease.",
-			Input:       inputSchema[leaseIDIn](),
-			Handler: func(ctx context.Context, call *call) (any, error) {
-				if err := requireManager(s); err != nil {
-					return nil, err
-				}
-				var in leaseIDIn
-				if err := decode(call, &in); err != nil {
-					return nil, err
-				}
-				if err := s.deps.Manager.ReleaseCredLease(ctx, in.Lease); err != nil {
-					return nil, err
-				}
-				return map[string]any{"released": in.Lease}, nil
-			}},
-		{Name: "vault.creds.put", Version: 1, Effects: "mutating", Tags: []string{"admin"},
-			Description: "ADMIN: create/replace a credential. The only way secrets enter.",
-			Input:       inputSchema[credPutIn](),
-			Handler: func(ctx context.Context, call *call) (any, error) {
-				if err := requireManager(s); err != nil {
-					return nil, err
-				}
-				var in credPutIn
-				if err := decode(call, &in); err != nil {
-					return nil, err
-				}
-				id, err := s.deps.Manager.PutCred(ctx, CredInput{ID: in.ID, Kind: in.Kind, Name: in.Name,
-					Public: in.Public, Secret: in.Secret, Labels: in.Labels, Policy: in.Policy})
-				if err != nil {
-					return nil, err
-				}
-				return map[string]any{"cred": id}, nil
-			}},
-		{Name: "vault.creds.delete", Version: 1, Effects: "mutating", Tags: []string{"admin"},
-			Description: "ADMIN: really delete a credential.",
-			Input:       inputSchema[credIDIn](),
-			Handler: func(ctx context.Context, call *call) (any, error) {
-				if err := requireManager(s); err != nil {
-					return nil, err
-				}
-				var in credIDIn
-				if err := decode(call, &in); err != nil {
-					return nil, err
-				}
-				if err := s.deps.Manager.DeleteCred(ctx, in.Cred); err != nil {
-					return nil, err
-				}
-				return map[string]any{"deleted": in.Cred}, nil
-			}},
-		{Name: "vault.creds.policy.set", Version: 1, Effects: "mutating", Tags: []string{"admin"},
-			Description: "ADMIN: replace a credential's lease policy.",
-			Input:       inputSchema[policySetIn](),
-			Handler: func(ctx context.Context, call *call) (any, error) {
-				if err := requireManager(s); err != nil {
-					return nil, err
-				}
-				var in policySetIn
-				if err := decode(call, &in); err != nil {
-					return nil, err
-				}
-				if err := s.deps.Manager.SetCredPolicy(ctx, in.Cred, in.Policy); err != nil {
-					return nil, err
-				}
-				return map[string]any{"cred": in.Cred, "updated": true}, nil
 			}},
 	}
 }

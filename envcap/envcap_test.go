@@ -115,8 +115,6 @@ type fakeManager struct {
 	provErr  error
 	pins     map[string]envcap.PinRecord
 	pinErr   map[string]error
-	creds    map[string]fakeCred
-	leases   map[string]envcap.CredLease
 	events   []envspec.SignalEvent
 	execFn   func(envID string, argv []string) envcap.ExecResult
 	typed    []string
@@ -130,19 +128,12 @@ type fakeEnv struct {
 	opID  string
 }
 
-type fakeCred struct {
-	in     envcap.CredInput
-	secret map[string]string // held apart; must never be returned
-}
-
 func newFakeManager() *fakeManager {
 	return &fakeManager{
 		byKey:  map[string]string{},
 		envs:   map[string]*fakeEnv{},
 		pins:   map[string]envcap.PinRecord{},
 		pinErr: map[string]error{},
-		creds:  map[string]fakeCred{},
-		leases: map[string]envcap.CredLease{},
 	}
 }
 
@@ -405,7 +396,7 @@ func (f *fakeManager) PoolCapacities() []envspec.PoolCapacity {
 	return []envspec.PoolCapacity{{Pool: envspec.PoolHost, CPUs: 8, MemoryMB: 16384}}
 }
 
-// --- fake android/signals/vault/rules ---
+// --- fake android/signals/rules ---
 
 type fakeDevice struct{ installed string }
 
@@ -550,57 +541,6 @@ func (f *fakeManager) CaptureSignals(sel envspec.Selector, where map[string]any,
 	return &fakeCapture{events: f.events}, nil
 }
 
-func (f *fakeManager) ListCreds(ctx context.Context) ([]envcap.CredView, error) {
-	out := []envcap.CredView{}
-	for id, c := range f.creds {
-		out = append(out, envcap.CredView{ID: id, Kind: c.in.Kind, Name: c.in.Name,
-			Public: c.in.Public, Labels: c.in.Labels, Available: true})
-	}
-	return out, nil
-}
-
-func (f *fakeManager) LeaseCred(ctx context.Context, req envcap.LeaseCredRequest) (envcap.CredLease, error) {
-	c, ok := f.creds[req.Cred]
-	if !ok {
-		return envcap.CredLease{}, fmt.Errorf("%w: cred %s", envspec.ErrNotFound, req.Cred)
-	}
-	l := envcap.CredLease{Lease: "lease_1", Cred: req.Cred, Kind: c.in.Kind,
-		Holder: req.Holder, Owner: req.Owner, Public: c.in.Public}
-	f.leases[l.Lease] = l
-	return l, nil
-}
-
-func (f *fakeManager) ReleaseCredLease(ctx context.Context, leaseID string) error {
-	delete(f.leases, leaseID)
-	return nil
-}
-
-func (f *fakeManager) ListCredLeases(ctx context.Context) ([]envcap.CredLease, error) {
-	out := []envcap.CredLease{}
-	for _, l := range f.leases {
-		out = append(out, l)
-	}
-	return out, nil
-}
-
-func (f *fakeManager) PutCred(ctx context.Context, in envcap.CredInput) (string, error) {
-	id := in.ID
-	if id == "" {
-		id = "cred_1"
-	}
-	f.creds[id] = fakeCred{in: in, secret: in.Secret}
-	return id, nil
-}
-
-func (f *fakeManager) DeleteCred(ctx context.Context, cred string) error {
-	delete(f.creds, cred)
-	return nil
-}
-
-func (f *fakeManager) SetCredPolicy(ctx context.Context, cred string, p envcap.CredPolicy) error {
-	return nil
-}
-
 func (f *fakeManager) LoadRule(ctx context.Context, source []byte, codeRef string, params map[string]any) (string, error) {
 	if strings.Contains(string(source), "badrule") {
 		return "", errors.New("compile: undefined badrule")
@@ -669,8 +609,6 @@ func TestCapabilitySurfaceComplete(t *testing.T) {
 		"env.push", "env.pull", "env.snapshot.save", "env.snapshot.load", "env.snapshot.list",
 		"env.android.install", "env.android.screenshot", "env.android.input",
 		"env.android.type-secret", "env.android.frida.hook",
-		"vault.creds.list", "vault.lease", "vault.release",
-		"vault.creds.put", "vault.creds.delete", "vault.creds.policy.set",
 		"signals.streams.list", "signals.query", "signals.tail", "signals.pin", "signals.unpin", "signals.capture",
 		"rules.load", "rules.unload", "rules.list", "rules.test", "rules.triggers.wait",
 		"host.status",
@@ -686,24 +624,13 @@ func TestCapabilitySurfaceComplete(t *testing.T) {
 		}
 	}
 	for _, name := range want {
-		c, ok := have[name]
-		if !ok {
+		if _, ok := have[name]; !ok {
 			t.Errorf("missing capability %s", name)
-			continue
 		}
-		if strings.HasPrefix(name, "vault.creds.put") || strings.HasPrefix(name, "vault.creds.delete") || strings.HasPrefix(name, "vault.creds.policy") {
-			found := false
-			for _, tg := range c.Tags {
-				if tg == "admin" {
-					found = true
-				}
-				if tg == "agent" {
-					t.Errorf("%s must not be agent-tagged", name)
-				}
-			}
-			if !found {
-				t.Errorf("%s missing admin tag", name)
-			}
+	}
+	for name := range have {
+		if strings.HasPrefix(name, "vault.") {
+			t.Errorf("%s: the library keeps no credentials and serves no vault", name)
 		}
 	}
 	if c := have["env.exec"]; !c.HasTag("exec") {
@@ -953,29 +880,23 @@ func TestPullPartialOutputOnError(t *testing.T) {
 	}
 }
 
-func TestVaultCapsNoSecretLeak(t *testing.T) {
+// type-secret carries only ids across the manager surface, never a value,
+// and status reports no credential leases: the library keeps none.
+func TestTypeSecretCarriesOnlyIDs(t *testing.T) {
 	reg, mgr, _ := setupSet(t)
-	put := call(t, reg, "vault.creds.put", map[string]any{
-		"kind": "google.account", "name": "g",
-		"public": map[string]string{"email": "g@example.test"},
-		"secret": map[string]string{"password": "NEVER-LEAK-ME"},
-	})
-	credID := put["cred"].(string)
-	for name, in := range map[string]map[string]any{
-		"vault.creds.list": {},
-		"vault.lease":      {"cred": credID},
-	} {
-		out := call(t, reg, name, in)
-		raw, _ := json.Marshal(out)
-		if strings.Contains(string(raw), "NEVER-LEAK-ME") {
-			t.Fatalf("secret leaked in %s: %s", name, raw)
-		}
-	}
-	// type-secret carries only ids, never the value.
 	envID := call(t, reg, "env.provision", map[string]any{"profile": "android-play"})["env"].(string)
-	call(t, reg, "env.android.type-secret", map[string]any{"env": envID, "lease": "lease_1", "field": "password"})
-	if len(mgr.typed) != 1 || strings.Contains(mgr.typed[0], "NEVER") {
+	out := call(t, reg, "env.android.type-secret", map[string]any{"env": envID, "lease": "lease_1", "field": "password"})
+	if len(mgr.typed) != 1 || mgr.typed[0] != "lease_1/password" {
 		t.Fatalf("typed = %v", mgr.typed)
+	}
+	if out["typed"] != "password" {
+		t.Fatalf("type-secret = %v", out)
+	}
+	if _, err := reg.Invoke(context.Background(), "env.android.type-secret", []byte(`{"env":"`+envID+`","lease":"cred_1"}`)); registry.CodeOf(err) != registry.Invalid {
+		t.Fatalf("a credential id in place of a lease: %v", err)
+	}
+	if status := call(t, reg, "env.status", map[string]any{}); status["cred_leases"] != nil {
+		t.Fatalf("env.status still reports credential leases: %v", status["cred_leases"])
 	}
 }
 
@@ -991,6 +912,8 @@ func TestUnavailableCarriesReason(t *testing.T) {
 		"not ready keeps no reason": {err: fmt.Errorf("%w: base preparing", envspec.ErrNotReady), code: registry.Unavailable},
 		"plain failure is internal": {err: errors.New("boot failed"), code: registry.Internal},
 		"hint error keeps its hint": {err: &envcap.HintError{Code: "invalid", Msg: "no such profile", Hint: "env.profiles.list lists them", Err: envspec.ErrInvalid}, code: registry.Invalid},
+		"credential held":           {err: fmt.Errorf("credential for env_1: %w", envcap.ErrCredentialUnavailable), code: registry.Unavailable},
+		"credential not granted":    {err: fmt.Errorf("credential for env_1: %w", envcap.ErrCredentialDenied), code: registry.Denied},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reg, mgr, _ := setupSet(t)

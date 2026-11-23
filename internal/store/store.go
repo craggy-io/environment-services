@@ -215,6 +215,9 @@ CREATE TABLE IF NOT EXISTS activities (
 CREATE TABLE IF NOT EXISTS closed_scopes (
   kind TEXT NOT NULL, id TEXT NOT NULL, PRIMARY KEY (kind, id)
 );
+CREATE TABLE IF NOT EXISTS cred_drops (
+  holder TEXT PRIMARY KEY
+);
 CREATE TABLE IF NOT EXISTS events (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL,
   env TEXT NOT NULL DEFAULT '', job TEXT NOT NULL DEFAULT '',
@@ -1041,4 +1044,39 @@ func (s *Store) ScopeClosed(kind, id string) bool {
 	var n int
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM closed_scopes WHERE kind=? AND id=?`, kind, id).Scan(&n)
 	return n > 0
+}
+
+// QueueCredDrop records that holder is gone and its credential leases are
+// still to be ended. It stays queued until ClearCredDrops names it.
+func (s *Store) QueueCredDrop(holder string) error {
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO cred_drops(holder) VALUES(?)`, holder)
+	return s.fail(err)
+}
+
+// CredDrops are the holders whose credential leases are still to be ended.
+func (s *Store) CredDrops() ([]string, error) {
+	rows, err := s.db.Query(`SELECT holder FROM cred_drops ORDER BY holder`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var holder string
+		if err := rows.Scan(&holder); err != nil {
+			return nil, err
+		}
+		out = append(out, holder)
+	}
+	return out, rows.Err()
+}
+
+// ClearCredDrops forgets holders whose leases were ended.
+func (s *Store) ClearCredDrops(holders []string) error {
+	for _, holder := range holders {
+		if _, err := s.db.Exec(`DELETE FROM cred_drops WHERE holder=?`, holder); err != nil {
+			return s.fail(err)
+		}
+	}
+	return nil
 }

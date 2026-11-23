@@ -3,7 +3,6 @@ package envcap
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	registry "github.com/craggy-io/capability-services/registry"
@@ -22,7 +21,11 @@ var (
 	ErrNoTarget      = errors.New("environment not running")
 	ErrNotApplicable = errors.New("stream not available on this environment")
 	ErrPreflight     = errors.New("collector preflight failed")
-	ErrPolicy        = errors.New("credential policy denied")
+	// ErrCredentialUnavailable: the credential store's limits refuse a
+	// lease for now. ErrCredentialDenied: the credential may not be put
+	// to the use asked for.
+	ErrCredentialUnavailable = errors.New("credential unavailable")
+	ErrCredentialDenied      = errors.New("credential denied")
 )
 
 // HintError carries an agent-facing next step minted below the
@@ -43,19 +46,6 @@ func (e *HintError) Error() string {
 }
 
 func (e *HintError) Unwrap() error { return e.Err }
-
-// PolicyError is a credential lease denial with its rule and holder.
-type PolicyError struct {
-	Rule   string
-	Detail string
-	Holder string
-}
-
-func (e *PolicyError) Error() string {
-	return fmt.Sprintf("credential policy %s: %s", e.Rule, e.Detail)
-}
-
-func (e *PolicyError) Is(target error) bool { return target == ErrPolicy }
 
 // agentError is the agent-facing error shape: a code, one sentence,
 // and a hint naming the call that would work. It never leaves the
@@ -93,15 +83,14 @@ func agentErr(err error) error {
 		}
 		return &agentError{Code: code, Message: trimStack(he.Msg), Hint: he.Hint}
 	}
-	var pe *PolicyError
-	if errors.As(err, &pe) {
-		hint := "list alternatives with vault.creds.list"
-		if pe.Holder != "" {
-			hint = "held by " + pe.Holder + "; wait for it or choose another credential"
-		}
-		return &agentError{Code: "unavailable", Message: pe.Detail, Hint: hint}
+	ae = &agentError{Code: codeFor(err), Message: trimStack(err.Error())}
+	switch {
+	case errors.Is(err, ErrCredentialDenied):
+		ae.Hint = "a person grants a credential to a use on the Credentials page; core.credentials.list shows what is granted"
+	case errors.Is(err, ErrCredentialUnavailable):
+		ae.Hint = "ask again later or choose another credential; core.credentials.list shows who holds each"
 	}
-	return &agentError{Code: codeFor(err), Message: trimStack(err.Error())}
+	return ae
 }
 
 func codeFor(err error) string {
@@ -112,11 +101,13 @@ func codeFor(err error) string {
 		return "invalid"
 	case errors.Is(err, envspec.ErrConflict):
 		return "conflict"
+	case errors.Is(err, ErrCredentialDenied):
+		return "denied"
 	case errors.Is(err, envspec.ErrNotReady),
 		errors.Is(err, ErrNoCapacity),
 		errors.Is(err, ErrBackendDown),
 		errors.Is(err, ErrUnsupported),
-		errors.Is(err, ErrPolicy),
+		errors.Is(err, ErrCredentialUnavailable),
 		errors.Is(err, ErrNoTarget),
 		errors.Is(err, ErrNotApplicable),
 		errors.Is(err, ErrPreflight):

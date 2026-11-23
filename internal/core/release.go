@@ -131,17 +131,18 @@ func (m *Manager) driveReleaseInner(ctx context.Context, envID string, op store.
 	// 1. Stop activities (ack or timeout).
 	m.acts.stopForRelease(e.ID, e.Generation)
 
-	// 2. Credential leases end with the env; an error is recorded,
-	// not fatal to physical cleanup.
-	if m.cfg.Vault != nil {
-		if verr := m.cfg.Vault.ReleaseHolder(ctx, "env:"+e.ID); verr != nil {
-			op.Error = "vault release: " + verr.Error()
-			_ = m.store.UpdateOperation(op, m.now())
-			m.emit("lease.released", e.ID, map[string]any{"kind": "credential", "error": m.redact(verr.Error())})
-		} else {
-			m.emit("lease.released", e.ID, map[string]any{"kind": "credential"})
-		}
-		m.refreshRedactor()
+	// 2. Credential leases end with the env: now under a call, else
+	// queued for the next one. An error is recorded, not fatal to
+	// physical cleanup, and the holder stays queued.
+	switch ended, cerr := m.endCreds(ctx, e.ID); {
+	case ended:
+		m.emit("lease.released", e.ID, map[string]any{"kind": "credential"})
+	case cerr == nil || errors.Is(cerr, ErrNoCall):
+		m.emit("lease.released", e.ID, map[string]any{"kind": "credential", "deferred": true})
+	default:
+		op.Error = "credential release: " + m.redact(cerr.Error())
+		_ = m.store.UpdateOperation(op, m.now())
+		m.emit("lease.released", e.ID, map[string]any{"kind": "credential", "deferred": true, "error": m.redact(cerr.Error())})
 	}
 
 	ad, hasAd := m.adapterForEnv(e)

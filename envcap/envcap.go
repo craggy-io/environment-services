@@ -73,7 +73,6 @@ func Groups() []registry.Group {
 		{Name: "host", Description: "Status and capacity of the machine environments run on."},
 		{Name: "rules", Description: "Load, test and wait on Starlark rules that trigger on recorded signals."},
 		{Name: "signals", Description: "Record, query, tail and capture runtime signals (logcat, network flows, binder, crashes) from environments."},
-		{Name: "vault", Description: "List and lease stored credentials for an environment without revealing secrets."},
 	}
 }
 

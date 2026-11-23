@@ -1,19 +1,45 @@
-package vault
+// Package redact keeps secret values out of what leaves the manager: a
+// Secret prints as "[redacted]" in every formatting path, and a Redactor
+// scrubs the values the manager is delivering from command output, errors
+// and signals.
+package redact
 
 import (
-	"context"
 	"encoding/base64"
+	"fmt"
+	"maps"
 	"net/url"
 	"sort"
 	"strings"
 	"sync"
 )
 
-// Redactor matches secret values under active leases. It implements
-// signalcore.Redactor. Matching is Aho–Corasick over raw values plus their
-// base64 and URL-encoded forms; values shorter than 6 bytes are skipped.
+// Secret wraps a credential value. All formatting prints "[redacted]". It
+// is not encryption: it keeps values out of logs, tool results and agent
+// context.
+type Secret struct{ v string }
+
+// NewSecret wraps a value.
+func NewSecret(v string) Secret { return Secret{v: v} }
+
+func (s Secret) String() string               { return "[redacted]" }
+func (s Secret) GoString() string             { return "[redacted]" }
+func (s Secret) Format(f fmt.State, _ rune)   { fmt.Fprint(f, "[redacted]") }
+func (s Secret) MarshalJSON() ([]byte, error) { return []byte(`"[redacted]"`), nil }
+func (s Secret) MarshalText() ([]byte, error) { return []byte("[redacted]"), nil }
+
+// Reveal returns the value. It exists for the delivery code inside this
+// library; agent-facing code must never call it.
+func (s Secret) Reveal() string { return s.v }
+
+// Redactor matches the secret values the manager is delivering. It
+// implements signalcore.Redactor. Matching is Aho–Corasick over raw values
+// plus their base64 and URL-encoded forms; values shorter than 6 bytes are
+// skipped. It knows only what it is told: Hold when a credential is
+// redeemed for a holder, Forget when the holder is gone.
 type Redactor struct {
 	mu       sync.RWMutex
+	held     map[string]map[string]map[string]Secret // holder -> cred -> field
 	ac       *aho
 	patterns []pattern
 }
@@ -23,53 +49,73 @@ type pattern struct {
 	tag  string // "[secret:cred_…/field]"
 }
 
-// Redactor returns a live redactor for the vault. Call Refresh after leases
-// change; active lease values are loaded at construction.
-func (v *Vault) Redactor() *Redactor {
-	r := &Redactor{}
-	_ = r.Refresh(v)
-	return r
+// New returns a redactor that matches nothing yet.
+func New() *Redactor { return &Redactor{held: map[string]map[string]map[string]Secret{}} }
+
+// Hold makes the redactor match a credential's secret fields for as long
+// as holder has it.
+func (r *Redactor) Hold(holder, cred string, secret map[string]Secret) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.held[holder] == nil {
+		r.held[holder] = map[string]map[string]Secret{}
+	}
+	r.held[holder][cred] = maps.Clone(secret)
+	r.rebuild()
 }
 
-// Refresh rebuilds the matcher from every secret under an active lease.
-func (r *Redactor) Refresh(v *Vault) error {
-	leases, err := v.Leases(context.Background(), "")
-	if err != nil {
-		return err
+// Forget drops everything held for holder.
+func (r *Redactor) Forget(holder string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.held[holder]; !ok {
+		return
 	}
+	delete(r.held, holder)
+	r.rebuild()
+}
+
+// rebuild makes the matcher from every held secret. The caller holds the
+// lock.
+func (r *Redactor) rebuild() {
 	var pats []pattern
 	seen := map[string]bool{}
-	for _, l := range leases {
-		for field, s := range l.cred.Secret {
-			val := s.v
-			if len(val) < 6 {
-				continue
-			}
-			tag := "[secret:" + l.Cred + "/" + field + "]"
-			for _, form := range []string{
-				val,
-				base64.StdEncoding.EncodeToString([]byte(val)),
-				base64.RawStdEncoding.EncodeToString([]byte(val)),
-				url.QueryEscape(val),
-			} {
-				if len(form) >= 6 && !seen[form] {
-					seen[form] = true
-					pats = append(pats, pattern{text: form, tag: tag})
+	for _, creds := range r.held {
+		for cred, fields := range creds {
+			for field, s := range fields {
+				val := s.v
+				if len(val) < 6 {
+					continue
+				}
+				tag := "[secret:" + cred + "/" + field + "]"
+				for _, form := range []string{
+					val,
+					base64.StdEncoding.EncodeToString([]byte(val)),
+					base64.RawStdEncoding.EncodeToString([]byte(val)),
+					url.QueryEscape(val),
+				} {
+					if len(form) >= 6 && !seen[form] {
+						seen[form] = true
+						pats = append(pats, pattern{text: form, tag: tag})
+					}
 				}
 			}
 		}
 	}
-	// Longest first so overlapping forms prefer the full value.
-	sort.Slice(pats, func(i, j int) bool { return len(pats[i].text) > len(pats[j].text) })
+	// Longest first so overlapping forms prefer the full value; ties by
+	// text so the matcher is the same for the same secrets.
+	sort.Slice(pats, func(i, j int) bool {
+		if len(pats[i].text) != len(pats[j].text) {
+			return len(pats[i].text) > len(pats[j].text)
+		}
+		return pats[i].text < pats[j].text
+	})
 	texts := make([]string, len(pats))
 	for i, p := range pats {
 		texts[i] = p.text
 	}
-	r.mu.Lock()
 	r.patterns = pats
 	r.ac = newAho(texts)
-	r.mu.Unlock()
-	return nil
 }
 
 // RedactString replaces every matched secret form in s with its tag.

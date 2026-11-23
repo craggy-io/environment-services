@@ -1,4 +1,4 @@
-package vault
+package redact
 
 import "encoding/json"
 

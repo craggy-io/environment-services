@@ -132,3 +132,31 @@ func TestRenewLeaseFencedByEpoch(t *testing.T) {
 		t.Fatalf("right epoch: %v", err)
 	}
 }
+
+func TestCredDropsQueueUntilCleared(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, holder := range []string{"env:b", "env:a", "env:b"} {
+		if err := st.QueueCredDrop(holder); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = st.Close()
+	st, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if got, err := st.CredDrops(); err != nil || len(got) != 2 || got[0] != "env:a" || got[1] != "env:b" {
+		t.Fatalf("queued after reopen = %v, %v", got, err)
+	}
+	if err := st.ClearCredDrops([]string{"env:a", "env:never"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.CredDrops(); len(got) != 1 || got[0] != "env:b" {
+		t.Fatalf("queued after clearing one = %v", got)
+	}
+}

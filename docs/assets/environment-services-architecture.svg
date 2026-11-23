@@ -79,7 +79,7 @@
   <rect class="band" x="810" y="445" width="590" height="141" rx="12"/>
   <path class="line" d="M832 465 H866" stroke-width="3"/>
   <text class="text name" x="832" y="498">Observation + support</text>
-  <text class="muted detail" x="832" y="531">signalcore / rules / vault</text>
+  <text class="muted detail" x="832" y="531">signalcore / rules / redact</text>
   <text class="muted detail" x="832" y="559">hostmon / xfer / androiddev</text>
   <path class="line" d="M530 588 V615 M403 615 H1265"/>
   <path class="line" d="M403 615 V632" marker-end="url(#arrow)"/>

@@ -75,10 +75,7 @@ func TestEnvCapOverRealManager(t *testing.T) {
 		t.Fatalf("env.exec lost the proc id: %v", ex)
 	}
 
-	// Vault and signals surfaces answer over the same deps.
-	if got := invoke("vault.creds.list", map[string]any{}); got["creds"] == nil {
-		t.Fatalf("vault.creds.list = %v", got)
-	}
+	// The signals surface answers over the same deps.
 	if got := invoke("signals.streams.list", map[string]any{"env": envID}); got["streams"] == nil {
 		t.Fatalf("signals.streams.list = %v", got)
 	}

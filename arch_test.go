@@ -36,19 +36,19 @@ func TestLayering(t *testing.T) {
 			"./internal/adapters/docker", "./internal/adapters/hostenv",
 			"./internal/core", "./internal/envtestfake", "./internal/hostmon",
 			"./internal/rules", "./internal/signalcore", "./internal/store",
-			"./internal/vault", "./internal/xfer",
+			"./internal/redact", "./internal/xfer",
 		},
 		Rules: []archtest.Rule{
-			allow([]string{"./envspec", "./internal/adb"}),
+			allow([]string{"./envspec", "./internal/adb", "./internal/redact"}),
 			allow([]string{"./envcap"}, "./envspec"),
 			allow([]string{"./environments"}, "./envspec", "./envcap",
 				"./internal/adapter", "./internal/adapters/...",
 				"./internal/androiddev", "./internal/core", "./internal/hostmon", "./internal/rules",
-				"./internal/signalcore", "./internal/store", "./internal/vault", "./internal/xfer"),
+				"./internal/redact", "./internal/signalcore", "./internal/store", "./internal/xfer"),
 			allow([]string{"./envtest"}, "./envspec", "./environments", "./internal/signalcore"),
 			allow([]string{"./examples/demo"}, "./envspec", "./environments", "./envcap"),
 			allow([]string{"./internal/adapter", "./internal/rules"}, "./envspec", "./internal/signalcore"),
-			allow([]string{"./internal/hostmon", "./internal/store", "./internal/vault",
+			allow([]string{"./internal/hostmon", "./internal/store",
 				"./internal/xfer", "./internal/signalcore"}, "./envspec"),
 			allow([]string{"./internal/androiddev"},
 				"./envspec", "./internal/adapter", "./internal/adb", "./internal/signalcore"),
@@ -57,7 +57,7 @@ func TestLayering(t *testing.T) {
 			allow([]string{"./internal/adapters/androidemu", "./internal/adapters/androidphys"},
 				"./envspec", "./internal/adapter", "./internal/adb", "./internal/androiddev", "./internal/signalcore"),
 			allow([]string{"./internal/core"}, "./envspec", "./internal/adapter", "./internal/hostmon",
-				"./internal/signalcore", "./internal/store", "./internal/vault", "./internal/xfer"),
+				"./internal/redact", "./internal/signalcore", "./internal/store", "./internal/xfer"),
 			{
 				// Consumers' domain packages alias envspec's record types, so it
 				// must not pull drivers, SQLite or Docker clients transitively.

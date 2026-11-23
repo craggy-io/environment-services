@@ -40,7 +40,7 @@ below); treat a backend as qualified only after running its live tests.
 - **Signal rules:** [stateful, budgeted Starlark rules](docs/rules.md) on
   script-services that emit derived signals, raise triggers and pin captures
   — and can never act on the world.
-- **Capability surface:** [39 registry capabilities](docs/capabilities.md)
+- **Capability surface:** [33 registry capabilities](docs/capabilities.md)
   over the same manager, with durable operation identities distinct from
   registry jobs and an injected artifact Stage/Keep port (this module has no
   artifact-services dependency).
@@ -48,8 +48,10 @@ below); treat a backend as qualified only after running its live tests.
   services selects Playwright MCP or Vercel agent-browser. Each lease gets a
   private container and session; navigation, accessibility snapshots, form
   actions and screenshots were exercised against a controlled local page.
-- **Secrets stay secret:** a credential vault with leases, redaction before
-  recording, and secret-typing that never lets a value leave the vault.
+- **Secrets stay secret:** the library keeps no credential. It leases one
+  from the application's store through a small port, is handed the secret
+  only to deliver it, redacts it before recording, and types it into a
+  device without the value crossing a capability.
 - **Small public surface, enforced layering:** `envspec` is
   standard-library-only (safe for domain packages to alias), and
   `arch_test.go` pins the whole import matrix.
@@ -71,16 +73,16 @@ adapter, not a second lifecycle system.
 | Package | Responsibilities | Imports (in this module) | Guide |
 | --- | --- | --- | --- |
 | `envspec` | Records and narrow interfaces: specs, profiles, handles, signal payloads, Android receipts. | none (stdlib only) | [envspec](docs/envspec.md) |
-| `envcap` | The 39 registry capabilities, operation/evidence records, the artifact Stage/Keep port. | envspec | [capabilities](docs/capabilities.md) |
+| `envcap` | The 33 registry capabilities, operation/evidence records, the artifact Stage/Keep port. | envspec | [capabilities](docs/capabilities.md) |
 | `environments` | The one assembly root: `Open` + `Manager`, `Observation`, `AndroidDevice`, managed services and browser API, envcap adapter. | envspec, envcap, internal/* | [environments](docs/environments.md), [browsers](docs/browsers.md) |
 | `envtest` | Test-only fakes (`FakeObservation`, `FakeServiceProvider`). Never for production. | envspec, environments | [signals](docs/signals.md#in-tests) |
 | `examples/demo` | Assembly smoke test: provision → push/exec/pull → capabilities → drain. | envspec, environments, envcap | — |
-| `internal/core` + `internal/store` | Durable lifecycle, leases, admission, operations, activities; profile loading through foundation-kit `bundle`. | envspec, adapter, hostmon, signalcore, vault, xfer | [design](docs/design.md) |
+| `internal/core` + `internal/store` | Durable lifecycle, leases, admission, operations, activities; profile loading through foundation-kit `bundle`. | envspec, adapter, hostmon, redact, signalcore, xfer | [design](docs/design.md) |
 | `internal/adapters/{docker,hostenv,androidemu,androidphys}` | Runtime mechanisms and their owned collectors. | envspec, adapter, signalcore (+ own tech) | — |
 | `internal/androiddev` + `internal/adb` | Device-over-serial surface, Frida, component supervisor; the adb transport. | envspec, adapter, signalcore | — |
 | `internal/signalcore` | Hub, recorder, ranges, selector/filter matching. | envspec | [signals](docs/signals.md) |
 | `internal/rules` | Starlark rule engine (the only script-services/Starlark importer). | envspec, signalcore | [rules](docs/rules.md) |
-| `internal/vault`, `internal/hostmon`, `internal/xfer` | Credential leasing/redaction (own DB); host sampler; file-tree transfer (tar, manifests, delta). | envspec | — |
+| `internal/redact`, `internal/hostmon`, `internal/xfer` | Secret redaction of what the manager delivers; host sampler; file-tree transfer (tar, manifests, delta). | envspec (redact: none) | — |
 
 External confinement: `capability-services` only in `envcap` (+ demo),
 `script-services`/`go.starlark.net` only in `internal/rules`, moby/gopacket

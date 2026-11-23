@@ -18,7 +18,6 @@ import (
 	"github.com/craggy-io/environment-services/internal/rules"
 	"github.com/craggy-io/environment-services/internal/signalcore"
 	"github.com/craggy-io/environment-services/internal/store"
-	"github.com/craggy-io/environment-services/internal/vault"
 )
 
 // markAs returns err marked so errors.Is(err, kind) holds across the
@@ -38,7 +37,7 @@ func (e *markedErr) Is(target error) bool { return target == e.kind }
 
 // xlate translates internal errors into the envcap error contract:
 // everything the capability layer translates (envspec + envcap
-// sentinels, *envcap.HintError, *envcap.PolicyError) is marked or
+// sentinels, *envcap.HintError) is marked or
 // converted here, in exactly one place. Unknown errors pass through
 // and surface as internal errors, as before.
 func xlate(err error) error {
@@ -48,10 +47,6 @@ func xlate(err error) error {
 	var he *core.HintError
 	if errors.As(err, &he) {
 		return &envcap.HintError{Code: he.Code, Msg: he.Msg, Hint: he.Hint, Err: err}
-	}
-	var pe *vault.PolicyError
-	if errors.As(err, &pe) {
-		return &envcap.PolicyError{Rule: pe.Rule, Detail: pe.Detail, Holder: pe.Holder}
 	}
 	switch {
 	case errors.Is(err, core.ErrNoCapacity), errors.Is(err, core.ErrQuota):
@@ -70,10 +65,12 @@ func xlate(err error) error {
 		return markAs(envcap.ErrNotApplicable, err)
 	case errors.Is(err, signalcore.ErrPreflight):
 		return markAs(envcap.ErrPreflight, err)
-	case errors.Is(err, vault.ErrNotFound):
-		return markAs(envspec.ErrNotFound, err)
-	case errors.Is(err, vault.ErrPolicy):
-		return markAs(envcap.ErrPolicy, err)
+	case errors.Is(err, core.ErrCredentialUnavailable):
+		return markAs(envcap.ErrCredentialUnavailable, err)
+	case errors.Is(err, core.ErrCredentialDenied):
+		return markAs(envcap.ErrCredentialDenied, err)
+	case errors.Is(err, core.ErrNoCall):
+		return markAs(envspec.ErrNotReady, err)
 	}
 	return err
 }
@@ -448,88 +445,6 @@ func (d *EnvCapDeps) CaptureSignals(sel envspec.Selector, where map[string]any, 
 		return nil, xlate(err)
 	}
 	return capObj, nil
-}
-
-// --- credentials ---
-
-func credPolicyOf(p envcap.CredPolicy) vault.Policy {
-	return vault.Policy{MaxConcurrent: p.MaxConcurrent, Cooldown: p.Cooldown, MaxPerDay: p.MaxPerDay,
-		HolderKinds: p.HolderKinds, Owners: p.Owners, Sticky: p.Sticky, OnePerHolder: p.OnePerHolder}
-}
-
-func credLeaseOf(l *vault.Lease) envcap.CredLease {
-	return envcap.CredLease{Lease: l.ID, Cred: l.Cred, Kind: l.Kind(),
-		Holder: l.Holder, Owner: l.Owner, Public: l.Public()}
-}
-
-// ListCreds lists credentials, public view only.
-func (d *EnvCapDeps) ListCreds(ctx context.Context) ([]envcap.CredView, error) {
-	views, err := d.m.vault.List(ctx)
-	if err != nil {
-		return nil, xlate(err)
-	}
-	out := make([]envcap.CredView, 0, len(views))
-	for _, v := range views {
-		out = append(out, envcap.CredView{ID: v.ID, Kind: v.Kind, Name: v.Name,
-			Public: v.Public, Labels: v.Labels, Available: v.Available, Reason: v.Reason})
-	}
-	return out, nil
-}
-
-// LeaseCred leases one credential; only public fields come back.
-func (d *EnvCapDeps) LeaseCred(ctx context.Context, req envcap.LeaseCredRequest) (envcap.CredLease, error) {
-	lease, err := d.m.vault.Lease(ctx, vault.LeaseRequest{
-		Cred: req.Cred, Holder: req.Holder, HolderKind: req.HolderKind,
-		Owner: req.Owner, Purpose: req.Purpose, TTL: req.TTL,
-		Select: vault.Selector{Kind: req.Kind, Labels: req.Labels},
-	})
-	if err != nil {
-		return envcap.CredLease{}, xlate(err)
-	}
-	return credLeaseOf(lease), nil
-}
-
-// ReleaseCredLease releases one credential lease.
-func (d *EnvCapDeps) ReleaseCredLease(ctx context.Context, leaseID string) error {
-	return xlate(d.m.vault.ReleaseByID(ctx, leaseID))
-}
-
-// ListCredLeases lists live leases (env.status).
-func (d *EnvCapDeps) ListCredLeases(ctx context.Context) ([]envcap.CredLease, error) {
-	leases, err := d.m.vault.Leases(ctx, "")
-	if err != nil {
-		return nil, xlate(err)
-	}
-	out := make([]envcap.CredLease, 0, len(leases))
-	for _, l := range leases {
-		out = append(out, credLeaseOf(l))
-	}
-	return out, nil
-}
-
-// PutCred creates or replaces a credential. Secrets enter the vault
-// and never come back out this surface.
-func (d *EnvCapDeps) PutCred(ctx context.Context, in envcap.CredInput) (string, error) {
-	sec := make(map[string]vault.Secret, len(in.Secret))
-	for k, v := range in.Secret {
-		sec[k] = vault.NewSecret(v)
-	}
-	c, err := d.m.vault.Put(vault.Credential{ID: in.ID, Kind: in.Kind, Name: in.Name,
-		Public: in.Public, Secret: sec, Labels: in.Labels, Policy: credPolicyOf(in.Policy)})
-	if err != nil {
-		return "", xlate(err)
-	}
-	return c.ID, nil
-}
-
-// DeleteCred really deletes a credential.
-func (d *EnvCapDeps) DeleteCred(ctx context.Context, cred string) error {
-	return xlate(d.m.vault.Delete(cred))
-}
-
-// SetCredPolicy replaces a credential's lease policy.
-func (d *EnvCapDeps) SetCredPolicy(ctx context.Context, cred string, p envcap.CredPolicy) error {
-	return xlate(d.m.vault.SetPolicy(cred, credPolicyOf(p)))
 }
 
 // --- rules ---

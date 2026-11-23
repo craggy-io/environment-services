@@ -1,5 +1,5 @@
 // Package environments is the one assembly and manager package: Open
-// builds the host sampler, credential vault, signal hub + recorder,
+// builds the host sampler, secret redactor, signal hub + recorder,
 // rule engine and runtime adapters over a state directory, and
 // Manager is the whole consumer-facing lifecycle surface. Everything
 // below it (durable core, adapters, signal plumbing) is internal;
@@ -30,15 +30,15 @@ import (
 	"github.com/craggy-io/environment-services/internal/androiddev"
 	"github.com/craggy-io/environment-services/internal/core"
 	"github.com/craggy-io/environment-services/internal/hostmon"
+	"github.com/craggy-io/environment-services/internal/redact"
 	"github.com/craggy-io/environment-services/internal/rules"
 	"github.com/craggy-io/environment-services/internal/signalcore"
-	"github.com/craggy-io/environment-services/internal/vault"
 )
 
 // Config opens a Manager. Only Dir is required.
 type Config struct {
-	// Dir is the manager state directory (state DB, vault DB, signal
-	// segments, host workspaces). Use a fresh directory per manager
+	// Dir is the manager state directory (state DB, signal segments,
+	// host workspaces). Use a fresh directory per manager
 	// identity; never share one between managers.
 	Dir string
 	// ManagerID names this manager in runtime ownership labels.
@@ -70,6 +70,12 @@ type Config struct {
 	HostPaths []string
 	// MutationPolicy gates autonomous repair/reap; nil allows all.
 	MutationPolicy envspec.MutationPolicy
+	// Credentials is the port to the application's credential store.
+	// The manager keeps no credential: it leases through the port when a
+	// spec asks for one, is handed a secret only to deliver it, and says
+	// when an environment that held leases is gone. Nil: a spec with
+	// Creds, and typing a secret, are unavailable.
+	Credentials Credentials
 	// Logger receives assembly notes (adapter skipped, rule trigger
 	// captures); nil discards.
 	Logger *slog.Logger
@@ -137,8 +143,7 @@ func coreOpts(opts []ProvisionOption) []core.ProvisionOption {
 type Manager struct {
 	core      *core.Manager
 	mon       *hostmon.Monitor
-	vault     *vault.Vault
-	redactor  *vault.Redactor
+	redactor  *redact.Redactor
 	hub       *signalcore.Hub
 	rec       *signalcore.Recorder
 	rules     *rules.Engine
@@ -150,7 +155,7 @@ type Manager struct {
 
 var _ envspec.ServiceProvider = (*Manager)(nil)
 
-// Open assembles and opens a Manager: host sampler, vault, signal
+// Open assembles and opens a Manager: host sampler, redactor, signal
 // hub + recorder, rule engine, then adapters — host always; docker
 // when the docker binary (or DOCKER_HOST) is present and the backend
 // answers; Android only when Config.AndroidSDK is set. Adapters that
@@ -177,17 +182,12 @@ func Open(ctx context.Context, cfg Config) (*Manager, error) {
 	monCtx, cancelMon := context.WithCancel(context.Background())
 	mon.Start(monCtx)
 
-	v, err := vault.Open(filepath.Join(cfg.Dir, "vault.db"))
-	if err != nil {
-		cancelMon()
-		return nil, err
-	}
-	redactor := v.Redactor()
+	redactor := redact.New()
 
 	rec := signalcore.NewRecorder(signalcore.RecorderConfig{Dir: filepath.Join(cfg.Dir, "signals")})
 	hub := signalcore.NewHub(signalcore.WithRecorder(rec), signalcore.WithRedactor(redactor))
 
-	m := &Manager{mon: mon, vault: v, redactor: redactor, hub: hub, rec: rec, cancelMon: cancelMon}
+	m := &Manager{mon: mon, redactor: redactor, hub: hub, rec: rec, cancelMon: cancelMon}
 	m.rules = rules.NewEngine(hub, rec,
 		rules.WithTriggerSink(m.triggerSink(log)),
 		rules.WithLookups(rules.Lookups{EnvInfo: m.ruleEnvInfo, HostSnapshot: m.ruleHostSnapshot}))
@@ -212,12 +212,11 @@ func Open(ctx context.Context, cfg Config) (*Manager, error) {
 
 	cm, err := core.Open(ctx, core.Config{
 		Dir: cfg.Dir, ManagerID: managerID, Adapters: adapters,
-		Host: mon, Vault: v, Redactor: redactor, Signals: hub,
+		Host: mon, Credentials: cfg.Credentials, Redactor: redactor, Signals: hub,
 		Profiles: cfg.Profiles, MutationPolicy: cfg.MutationPolicy,
 	})
 	if err != nil {
 		hub.Close()
-		_ = v.Close()
 		cancelMon()
 		return nil, err
 	}

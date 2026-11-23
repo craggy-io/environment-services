@@ -125,9 +125,9 @@ func (d *Device) KeyEvent(ctx context.Context, code int) error {
 }
 
 // Text types text into the focused field (input text, spaces as %s).
-// Secret values reach it only inside a vault Lease.Use callback held
-// by the caller (environments/envcap glue); this package never sees
-// the vault.
+// A secret value reaches it only from the caller (environments/envcap
+// glue), which the manager handed it to be typed; this package never
+// sees a credential.
 func (d *Device) Text(ctx context.Context, text string) error {
 	_, code, err := d.Shell(ctx, "input text "+inputQuote(text))
 	return d.inputOK("", code, err, "text")
