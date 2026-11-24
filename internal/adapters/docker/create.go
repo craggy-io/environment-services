@@ -129,10 +129,17 @@ func (a *Adapter) Create(ctx context.Context, op adapter.OpContext, s envspec.Sp
 		cpuQuota = int64(s.Resources.CPUs * 100000)
 	}
 	pids := int64(512)
+	// Create from the resolved image ID, not the mutable tag, so the
+	// recorded digest is the image that actually ran even if the tag
+	// moved between ensure and create.
+	createImage := image
+	if digest != "" {
+		createImage = digest
+	}
 	create, err := a.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: name,
 		Config: &container.Config{
-			Image: image, User: user, Labels: a.labelsFor(id, s),
+			Image: createImage, User: user, Labels: a.labelsFor(id, s),
 			Cmd:          []string{"sleep", "infinity"},
 			WorkingDir:   "/work",
 			Tty:          false,
@@ -201,11 +208,17 @@ func publishedPortBindings(s uint16) network.PortMap {
 
 func (a *Adapter) startEgressSidecar(ctx context.Context, inst *Instance, netName string) error {
 	img := a.SidecarImage
-	if _, exists, _ := a.imageDigest(ctx, img); !exists {
+	digest, exists, _ := a.imageDigest(ctx, img)
+	if !exists {
 		if err := a.pull(ctx, img, nil, inst.envID); err != nil {
 			return err
 		}
+		digest, _, _ = a.imageDigest(ctx, img)
 	}
+	if digest != "" {
+		img = digest
+	}
+	sidecarPids := int64(256)
 	res, err := a.cli.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Name: inst.name + "-proxy",
 		Config: &container.Config{
@@ -213,7 +226,16 @@ func (a *Adapter) startEgressSidecar(ctx context.Context, inst *Instance, netNam
 			Cmd:    []string{"mitmdump", "--listen-port", "8080", "--set", "block_global=false"},
 			Labels: map[string]string{LabelEnv: inst.envID, LabelManager: a.ManagerID, LabelProfile: inst.spec.Profile, LabelSidecar: "proxy"},
 		},
-		HostConfig: &container.HostConfig{NetworkMode: container.NetworkMode(netName)},
+		HostConfig: &container.HostConfig{
+			NetworkMode: container.NetworkMode(netName),
+			CapDrop:     []string{"ALL"},
+			SecurityOpt: []string{"no-new-privileges"},
+			Resources: container.Resources{
+				Memory:     512 << 20,
+				MemorySwap: 512 << 20,
+				PidsLimit:  &sidecarPids,
+			},
+		},
 		NetworkingConfig: &network.NetworkingConfig{
 			EndpointsConfig: map[string]*network.EndpointSettings{netName: {Aliases: []string{"proxy"}}},
 		},

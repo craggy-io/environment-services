@@ -107,11 +107,41 @@ type dirSink struct {
 func DirSink(path string) envspec.Sink { return &dirSink{root: path} }
 
 func (d *dirSink) localPath(p string) (string, error) {
-	clean := filepath.Clean("/" + filepath.FromSlash(p))
-	if strings.Contains(clean, "..") {
-		return "", fmt.Errorf("xfer: path %q escapes sink", p)
+	local, err := filepath.Localize(p)
+	if err != nil {
+		return "", fmt.Errorf("xfer: path %q escapes sink: %w", p, err)
 	}
-	return filepath.Join(d.root, clean), nil
+	if err := os.MkdirAll(d.root, 0o755); err != nil {
+		return "", err
+	}
+	root, err := filepath.EvalSymlinks(d.root)
+	if err != nil {
+		return "", err
+	}
+	target := filepath.Join(root, local)
+	// A symlinked component inside the root must not redirect the
+	// write outside it: resolve the deepest existing ancestor and
+	// require containment, then rebuild the path from it.
+	probe := target
+	for {
+		resolved, err := filepath.EvalSymlinks(probe)
+		if err == nil {
+			rel, err := filepath.Rel(root, resolved)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return "", fmt.Errorf("xfer: path %q escapes sink through a symlink", p)
+			}
+			rest, err := filepath.Rel(probe, target)
+			if err != nil {
+				return "", err
+			}
+			return filepath.Join(resolved, rest), nil
+		}
+		parent := filepath.Dir(probe)
+		if parent == probe {
+			return "", err
+		}
+		probe = parent
+	}
 }
 
 func (d *dirSink) Add(path string, mode int64, r io.Reader) error {
@@ -121,9 +151,12 @@ func (d *dirSink) Add(path string, mode int64, r io.Reader) error {
 	}
 	e := envspec.Entry{Path: path, Mode: mode}
 	if entryIsSymlink(e) {
-		target, err := io.ReadAll(r)
+		target, err := io.ReadAll(io.LimitReader(r, 64<<10))
 		if err != nil {
 			return err
+		}
+		if !safeLinkTarget(path, filepath.ToSlash(string(target))) {
+			return fmt.Errorf("xfer: symlink %q points outside the sink", path)
 		}
 		d.mu.Lock()
 		defer d.mu.Unlock()

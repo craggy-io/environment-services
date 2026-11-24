@@ -35,13 +35,17 @@ func (s Secret) Reveal() string { return s.v }
 // Redactor matches the secret values the manager is delivering. It
 // implements signalcore.Redactor. Matching is Aho–Corasick over raw values
 // plus their base64 and URL-encoded forms; values shorter than 6 bytes are
-// skipped. It knows only what it is told: Hold when a credential is
+// matched only as whole payload fields, never as substrings. It knows only what it is told: Hold when a credential is
 // redeemed for a holder, Forget when the holder is gone.
 type Redactor struct {
 	mu       sync.RWMutex
 	held     map[string]map[string]map[string]Secret // holder -> cred -> field
 	ac       *aho
 	patterns []pattern
+	// shorts holds sub-6-byte values by exact value: too short for
+	// substring matching (they would redact half of any output), but a
+	// payload field that is exactly the secret is still scrubbed.
+	shorts map[string]string
 }
 
 type pattern struct {
@@ -80,14 +84,18 @@ func (r *Redactor) Forget(holder string) {
 func (r *Redactor) rebuild() {
 	var pats []pattern
 	seen := map[string]bool{}
+	shorts := map[string]string{}
 	for _, creds := range r.held {
 		for cred, fields := range creds {
 			for field, s := range fields {
 				val := s.v
+				tag := "[secret:" + cred + "/" + field + "]"
 				if len(val) < 6 {
+					if val != "" {
+						shorts[val] = tag
+					}
 					continue
 				}
-				tag := "[secret:" + cred + "/" + field + "]"
 				for _, form := range []string{
 					val,
 					base64.StdEncoding.EncodeToString([]byte(val)),
@@ -116,6 +124,7 @@ func (r *Redactor) rebuild() {
 	}
 	r.patterns = pats
 	r.ac = newAho(texts)
+	r.shorts = shorts
 }
 
 // RedactString replaces every matched secret form in s with its tag.
@@ -193,8 +202,35 @@ func (r *Redactor) Redact(stream string, data any) any {
 }
 
 func (r *Redactor) redactValue(v any) any {
-	if s, ok := v.(string); ok {
-		return r.RedactString(s)
+	switch d := v.(type) {
+	case string:
+		r.mu.RLock()
+		tag, isShort := r.shorts[d]
+		r.mu.RUnlock()
+		if isShort {
+			return tag
+		}
+		return r.RedactString(d)
+	case map[string]any:
+		out := make(map[string]any, len(d))
+		for k, val := range d {
+			out[k] = r.redactValue(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(d))
+		for i, val := range d {
+			out[i] = r.redactValue(val)
+		}
+		return out
+	case []string:
+		out := make([]string, len(d))
+		for i, s := range d {
+			if red, ok := r.redactValue(s).(string); ok {
+				out[i] = red
+			}
+		}
+		return out
 	}
 	return v
 }

@@ -41,11 +41,35 @@ func (i *Instance) mapPath(p string) (string, error) {
 	return cleanFull, nil
 }
 
+// hostEnvAllowed reports whether a manager-process variable may pass
+// into a host-environment exec. Agent code runs there, so the manager's
+// own API keys must not ride along; deliberate values still arrive via
+// the profile's Env, delivered credentials and the command's Env.
+func hostEnvAllowed(k string) bool {
+	switch k {
+	case "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC",
+		"TEMP", "TMP", "TMPDIR", "USERPROFILE", "HOME", "HOMEDRIVE", "HOMEPATH",
+		"APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+		"NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS",
+		"USER", "LOGNAME", "USERNAME", "SHELL", "LANG", "TZ", "TERM",
+		"CC", "CXX", "AR", "VIRTUAL_ENV", "PROMPT", "PSMODULEPATH":
+		return true
+	}
+	for _, p := range []string{"LC_", "GO", "CGO_", "ANDROID_", "JAVA_", "PYTHON", "PIP_", "CONDA_", "DOTNET_", "XDG_", "RUST"} {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return strings.HasSuffix(k, "_HOME")
+}
+
 func (i *Instance) buildEnv(c adapter.ExecCmd) []string {
 	envmap := map[string]string{}
 	for _, kv := range os.Environ() {
 		k, v, _ := strings.Cut(kv, "=")
-		envmap[strings.ToUpper(k)] = v
+		if hostEnvAllowed(strings.ToUpper(k)) {
+			envmap[strings.ToUpper(k)] = v
+		}
 	}
 	var extra map[string]string
 	var pathPrepend []string
@@ -252,8 +276,13 @@ func (s *hostRecvSink) Add(path string, mode int64, r io.Reader) error {
 			if line == "" {
 				continue
 			}
-			full := filepath.Join(s.root, filepath.FromSlash(line))
-			if strings.HasPrefix(filepath.Clean(full), filepath.Clean(s.root)) {
+			local, err := filepath.Localize(line)
+			if err != nil {
+				continue
+			}
+			full := filepath.Join(s.root, local)
+			cleanFull, cleanRoot := filepath.Clean(full), filepath.Clean(s.root)
+			if strings.HasPrefix(cleanFull, cleanRoot+string(os.PathSeparator)) {
 				_ = os.Remove(full)
 			}
 		}

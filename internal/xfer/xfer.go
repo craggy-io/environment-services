@@ -17,6 +17,31 @@ type Options struct {
 	Delta    bool // send only differences vs the destination manifest
 	Workers  int  // receive fan-out for ConcurrentSinks; default 8
 	Progress func(envspec.Progress)
+
+	// MaxBytes and MaxFiles bound a receive (ReadTar) so a compromised
+	// peer cannot fill the host disk. Zero uses the defaults.
+	MaxBytes int64
+	MaxFiles int
+}
+
+// Default receive bounds for ReadTar.
+const (
+	defaultMaxBytes = 16 << 30
+	defaultMaxFiles = 1_000_000
+)
+
+func (o Options) maxBytes() int64 {
+	if o.MaxBytes > 0 {
+		return o.MaxBytes
+	}
+	return defaultMaxBytes
+}
+
+func (o Options) maxFiles() int {
+	if o.MaxFiles > 0 {
+		return o.MaxFiles
+	}
+	return defaultMaxFiles
 }
 
 func (o Options) report(s envspec.TransferStats, op string) {

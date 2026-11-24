@@ -959,6 +959,25 @@ func TestErrorsCarryHintsAndStrictInputs(t *testing.T) {
 	}
 }
 
+// signals.query/tail/capture must not read another owner's env by
+// naming it as env or source: selectors are scoped to held envs.
+func TestSignalsQueryForeignEnvRefused(t *testing.T) {
+	reg, _, _ := setupSet(t)
+	ctx := context.Background()
+	_ = call(t, reg, "env.provision", map[string]any{"profile": "linux-tools"})["env"].(string)
+	for _, payload := range []string{
+		`{"env":"env_foreign","within":"1m"}`,
+		`{"sources":["env_foreign"],"within":"1m"}`,
+	} {
+		if _, err := reg.Invoke(ctx, "signals.query", []byte(payload)); err == nil {
+			t.Fatalf("signals.query %s succeeded for a foreign env", payload)
+		}
+		if _, err := reg.Invoke(ctx, "signals.capture", []byte(payload)); err == nil {
+			t.Fatalf("signals.capture %s succeeded for a foreign env", payload)
+		}
+	}
+}
+
 func TestSignalsPinUnpinAndCoverageNotes(t *testing.T) {
 	reg, mgr, _ := setupSet(t)
 	ctx := context.Background()

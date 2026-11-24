@@ -138,11 +138,16 @@ func entryHeader(ctx context.Context, src envspec.Source, e envspec.Entry) (*tar
 			return nil, nil, err
 		}
 		if e.Size < 0 {
-			// Unknown size: buffer (sources should report sizes).
-			b, err := io.ReadAll(rc)
+			// Unknown size: buffer (sources should report sizes), but
+			// never without bound.
+			const maxUnknownSize = 256 << 20
+			b, err := io.ReadAll(io.LimitReader(rc, maxUnknownSize+1))
 			rc.Close()
 			if err != nil {
 				return nil, nil, err
+			}
+			if len(b) > maxUnknownSize {
+				return nil, nil, fmt.Errorf("xfer: entry %q of unknown size exceeds %d bytes; its source must report sizes", e.Path, maxUnknownSize)
 			}
 			hdr.Size = int64(len(b))
 			return hdr, io.NopCloser(bytes.NewReader(b)), nil
@@ -204,6 +209,8 @@ func ReadTar(ctx context.Context, r io.Reader, sink envspec.Sink, opts Options) 
 		}
 		return deliver(sink, pf)
 	}
+	var entries int
+	var totalBytes int64
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -228,10 +235,34 @@ func ReadTar(ctx context.Context, r io.Reader, sink envspec.Sink, opts Options) 
 		if name == "" || name == "." {
 			continue
 		}
+		entries++
+		if entries > opts.maxFiles() {
+			if jobs != nil {
+				close(jobs)
+				wg.Wait()
+			}
+			return st, fmt.Errorf("xfer: tar has more than %d entries", opts.maxFiles())
+		}
+		if hdr.Typeflag == tar.TypeReg || hdr.Typeflag == tar.TypeRegA {
+			totalBytes += hdr.Size
+			if totalBytes > opts.maxBytes() {
+				if jobs != nil {
+					close(jobs)
+					wg.Wait()
+				}
+				return st, fmt.Errorf("xfer: tar expands beyond %d bytes", opts.maxBytes())
+			}
+		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			continue // directories are implicit in the Sink tree model
 		case tar.TypeSymlink:
+			if !safeLinkTarget(name, hdr.Linkname) {
+				// A link out of the tree would let later entries write
+				// through it, outside the sink root.
+				st.Skipped++
+				continue
+			}
 			if err := emit(pendingFile{path: name, mode: 0o120000, data: []byte(hdr.Linkname)}); err != nil {
 				if jobs != nil {
 					close(jobs)
@@ -318,7 +349,17 @@ func deliver(sink envspec.Sink, pf pendingFile) error {
 }
 
 func cleanTarName(name string) string {
-	// Normalise "./a/b" and "a/b/" forms; reject escapes.
+	// Normalise "./a/b" and "a/b/" forms; reject escapes. A name with a
+	// ".." segment or a backslash is rejected outright (returns "") so
+	// no Sink implementation has to second-guess it.
+	if strings.ContainsAny(name, "\\\x00") {
+		return ""
+	}
+	for _, seg := range strings.Split(name, "/") {
+		if seg == ".." {
+			return ""
+		}
+	}
 	for len(name) > 0 && (name[0] == '/' || name[0] == '.') {
 		if len(name) > 1 && name[0] == '.' && name[1] != '/' {
 			break
@@ -332,6 +373,19 @@ func cleanTarName(name string) string {
 		name = name[:len(name)-1]
 	}
 	return name
+}
+
+// safeLinkTarget reports whether a symlink at name (slash path inside
+// the tree) pointing at target stays inside the tree.
+func safeLinkTarget(name, target string) bool {
+	if target == "" || strings.ContainsAny(target, "\\\x00") || path.IsAbs(target) {
+		return false
+	}
+	if len(target) >= 2 && target[1] == ':' { // Windows drive form
+		return false
+	}
+	resolved := path.Join(path.Dir(name), target)
+	return resolved != ".." && !strings.HasPrefix(resolved, "../")
 }
 
 // DigestOf hashes r as "sha256:<hex>".

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/google/jsonschema-go/jsonschema"
@@ -49,7 +50,17 @@ type call struct {
 }
 
 // set carries the shared dependencies every handler closes over.
-type set struct{ deps Deps }
+type set struct {
+	deps Deps
+
+	// ruleOwners records who loaded each rule instance through
+	// rules.load, so unload/list/triggers can be scoped to the loader.
+	// The rules engine itself is owner-agnostic; instances not loaded
+	// through this set are invisible to its callers.
+	mu         sync.Mutex
+	ruleOwners map[string]envspec.Owner
+	ruleNames  map[string]string // instance -> rule name
+}
 
 // Capabilities returns the full capability set as registry
 // capabilities, ready for Registry.Add.

@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -219,6 +221,91 @@ func (in signalsQueryIn) window() (sel envspec.Selector, from, to time.Time) {
 	return sel, from, to
 }
 
+// noSignalsSource matches no real source; used when scoping leaves a
+// caller with no readable sources (an empty Sources list would mean any).
+const noSignalsSource = "\x00none"
+
+// scopeSignals narrows sel to sources the caller may read: environments
+// it holds (live, or its own by EnvInfo for exact ids of released envs)
+// plus the "host" source. A selector naming someone else's environment
+// fails exactly as envOwned does; globs and an empty Sources list are
+// expanded against the held set, never left meaning "anywhere". The
+// returned set is for post-filtering results as a second line of defence.
+func (s *set) scopeSignals(ctx context.Context, sel envspec.Selector) (envspec.Selector, map[string]bool, error) {
+	owner, err := s.owner(ctx)
+	if err != nil {
+		return sel, nil, err
+	}
+	held := map[string]bool{"host": true}
+	for _, v := range s.heldEnvs(owner) {
+		held[v.Env] = true
+	}
+	allowed := map[string]bool{}
+	var sources []string
+	keep := func(id string) {
+		if !allowed[id] {
+			allowed[id] = true
+			sources = append(sources, id)
+		}
+	}
+	if len(sel.Sources) == 0 {
+		for id := range held {
+			keep(id)
+		}
+	}
+	for _, src := range sel.Sources {
+		if strings.ContainsAny(src, "*?[") {
+			for id := range held {
+				if ok, _ := path.Match(src, id); ok {
+					keep(id)
+				}
+			}
+			continue
+		}
+		if held[src] {
+			keep(src)
+			continue
+		}
+		// Exact id of an env not currently live-held: readable only if
+		// it is the caller's own (e.g. released, for history queries).
+		if _, _, err := s.envOwned(ctx, src); err != nil {
+			return sel, nil, err
+		}
+		keep(src)
+	}
+	// A named collector on someone else's env is not readable either.
+	if len(sel.Collectors) > 0 {
+		byID := map[string]string{}
+		for _, rc := range s.deps.Manager.RunningCollectors() {
+			byID[rc.ID] = rc.Source
+		}
+		for _, c := range sel.Collectors {
+			if src, known := byID[c]; known && !allowed[src] && !held[src] {
+				return sel, nil, &agentError{Code: "not_found",
+					Message: fmt.Sprintf("collector %s is not among yours", c),
+					Hint:    "env.status lists the collectors on environments you hold"}
+			}
+		}
+	}
+	if len(sources) == 0 {
+		sources = []string{noSignalsSource}
+	}
+	sort.Strings(sources)
+	sel.Sources = sources
+	return sel, allowed, nil
+}
+
+// filterSignals drops events from sources outside the allowed set.
+func filterSignals(evs []envspec.SignalEvent, allowed map[string]bool) []envspec.SignalEvent {
+	out := evs[:0:0]
+	for _, ev := range evs {
+		if allowed[ev.Source] {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
 func eventsOut(evs []envspec.SignalEvent, offset, limit int, q envspec.Quality) map[string]any {
 	total := len(evs)
 	if limit <= 0 || limit > 200 {
@@ -295,10 +382,15 @@ func (s *set) buildSignals() []capability {
 					return nil, err
 				}
 				sel, from, to := in.window()
+				sel, allowed, err := s.scopeSignals(ctx, sel)
+				if err != nil {
+					return nil, err
+				}
 				evs, q, err := s.deps.Manager.QuerySignals(sel, in.Where, from, to)
 				if err != nil {
 					return nil, err
 				}
+				evs = filterSignals(evs, allowed)
 				out := eventsOut(evs, in.Offset, in.Limit, q)
 				if notes := s.coverageNotes(sel, from, to, evs); len(notes) > 0 {
 					out["notes"] = notes
@@ -317,6 +409,10 @@ func (s *set) buildSignals() []capability {
 					return nil, err
 				}
 				sel, _, _ := in.window()
+				sel, allowed, err := s.scopeSignals(ctx, sel)
+				if err != nil {
+					return nil, err
+				}
 				wait := in.WaitSeconds
 				if wait <= 0 {
 					wait = 10
@@ -329,6 +425,7 @@ func (s *set) buildSignals() []capability {
 					limit = 50
 				}
 				got, q, err := s.deps.Manager.TailSignals(ctx, sel, in.Where, time.Duration(wait)*time.Second, limit)
+				got = filterSignals(got, allowed)
 				if err != nil {
 					stream := ""
 					if len(sel.Streams) == 1 {
@@ -406,6 +503,10 @@ func (s *set) buildSignals() []capability {
 					return nil, err
 				}
 				sel, from, to := in.window()
+				sel, _, err := s.scopeSignals(ctx, sel)
+				if err != nil {
+					return nil, err
+				}
 				if in.Before != "" || in.After != "" {
 					now := time.Now()
 					if d, err := time.ParseDuration(in.Before); err == nil {
@@ -466,6 +567,43 @@ func (s *set) pinRecord(pinID string) (PinRecord, error) {
 		Hint:    "signals.streams.list {env} shows the pins on an environment"}
 }
 
+// sameOwner reports whether two owners are the same principal (by id
+// or by session), mirroring envOwned.
+func sameOwner(a, b envspec.Owner) bool {
+	return a.ID != "" && a.ID == b.ID || a.Session != "" && a.Session == b.Session
+}
+
+func (s *set) recordRule(instance string, owner envspec.Owner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.ruleOwners == nil {
+		s.ruleOwners = map[string]envspec.Owner{}
+		s.ruleNames = map[string]string{}
+	}
+	s.ruleOwners[instance] = owner
+	// Refresh the instance->rule-name map from the manager so trigger
+	// filtering can work by rule name.
+	for _, ri := range s.deps.Manager.ListRules() {
+		s.ruleNames[ri.Instance] = ri.Rule
+	}
+}
+
+// ownedRules returns the rule instances/names this caller loaded.
+func (s *set) ownedRules(owner envspec.Owner) (instances, names map[string]bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	instances, names = map[string]bool{}, map[string]bool{}
+	for inst, o := range s.ruleOwners {
+		if sameOwner(owner, o) {
+			instances[inst] = true
+			if n := s.ruleNames[inst]; n != "" {
+				names[n] = true
+			}
+		}
+	}
+	return instances, names
+}
+
 func (s *set) buildRules() []capability {
 	return []capability{
 		{Name: "rules.load", Version: 1, Effects: "mutating", Tags: []string{"agent"},
@@ -500,6 +638,9 @@ func (s *set) buildRules() []capability {
 				if err != nil {
 					return nil, &agentError{Code: "invalid", Message: err.Error(), Hint: "fix the rule and load again; the running version was left in place"}
 				}
+				if owner, oerr := s.owner(ctx); oerr == nil {
+					s.recordRule(id, owner)
+				}
 				return map[string]any{"rule_instance": id, "code_ref": codeRef}, nil
 			}},
 		{Name: "rules.unload", Version: 1, Effects: "mutating", Tags: []string{"agent"},
@@ -513,7 +654,23 @@ func (s *set) buildRules() []capability {
 				if err := decode(call, &in); err != nil {
 					return nil, err
 				}
+				owner, err := s.owner(ctx)
+				if err != nil {
+					return nil, err
+				}
+				s.mu.Lock()
+				recOwner, recorded := s.ruleOwners[in.RuleInstance]
+				s.mu.Unlock()
+				if recorded && !sameOwner(owner, recOwner) {
+					return nil, &agentError{Code: "not_found",
+						Message: fmt.Sprintf("rule instance %s is not among yours", in.RuleInstance),
+						Hint:    "rules.list shows the rules you loaded"}
+				}
 				_ = s.deps.Manager.UnloadRule(in.RuleInstance)
+				s.mu.Lock()
+				delete(s.ruleOwners, in.RuleInstance)
+				delete(s.ruleNames, in.RuleInstance)
+				s.mu.Unlock()
 				return map[string]any{"unloaded": in.RuleInstance}, nil
 			}},
 		{Name: "rules.list", Version: 1, Effects: "readonly", Tags: []string{"agent"},
@@ -522,8 +679,16 @@ func (s *set) buildRules() []capability {
 				if err := requireManager(s); err != nil {
 					return nil, err
 				}
+				owner, err := s.owner(ctx)
+				if err != nil {
+					return nil, err
+				}
+				mine, _ := s.ownedRules(owner)
 				var out []map[string]any
 				for _, ri := range s.deps.Manager.ListRules() {
+					if !mine[ri.Instance] {
+						continue
+					}
 					m := map[string]any{"instance": ri.Instance, "rule": ri.Rule, "version": ri.Version,
 						"description": ri.Description, "code_ref": ri.CodeRef, "state": ri.State,
 						"events": ri.Events, "emits": ri.Emits, "triggers": ri.Triggers, "faults": ri.Faults}
@@ -558,8 +723,13 @@ func (s *set) buildRules() []capability {
 				if in.Env != "" {
 					sel.Sources = []string{in.Env}
 				}
+				sel, allowed, err := s.scopeSignals(ctx, sel)
+				if err != nil {
+					return nil, err
+				}
 				now := time.Now()
 				evs, _, err := s.deps.Manager.QuerySignals(sel, nil, now.Add(-within), now)
+				evs = filterSignals(evs, allowed)
 				if err != nil {
 					return nil, err
 				}
@@ -591,12 +761,23 @@ func (s *set) buildRules() []capability {
 				if wait > 60 {
 					wait = 60
 				}
+				owner, err := s.owner(ctx)
+				if err != nil {
+					return nil, err
+				}
+				_, myNames := s.ownedRules(owner)
+				if in.Rule != "" && !myNames[in.Rule] {
+					return map[string]any{"triggers": []map[string]any{}}, nil
+				}
 				ts, err := s.deps.Manager.WaitRuleTriggers(ctx, in.Rule, time.Duration(wait)*time.Second)
 				if err != nil {
 					return nil, err
 				}
 				var out []map[string]any
 				for _, t := range ts {
+					if !myNames[t.Rule] {
+						continue
+					}
 					out = append(out, map[string]any{"rule": t.Rule, "kind": t.Kind, "time": t.Time.Format(time.RFC3339),
 						"data": t.Data, "capture": t.CaptureID})
 				}

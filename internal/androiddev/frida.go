@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/binary"
 	"encoding/pem"
 	"fmt"
@@ -36,6 +38,12 @@ type FridaServer struct {
 	// FridaOptions.Version, else the host client's version — from
 	// the official Frida GitHub releases. Off by default.
 	AutoDownload bool
+	// Checksums optionally pin "frida-server-<version>-android-<arch>"
+	// to the SHA-256 (hex) of the decompressed binary. A download
+	// whose asset is in the map must match; assets not in the map
+	// still download unpinned, so hosts that want verification for
+	// every version must pin each one they allow.
+	Checksums map[string]string
 
 	mu sync.Mutex // serializes downloads
 }
@@ -93,7 +101,29 @@ func (f *FridaServer) cacheDir() (string, error) {
 // name binary looks for, and returns its path. An existing file is
 // reused. The payload must look like an ELF binary of plausible size —
 // a bad download fails closed and leaves nothing behind.
+// fridaVersionArchOK validates the strings that end up in URLs and
+// file names: a dotted-numeric version and a known android arch.
+func fridaVersionArchOK(arch, version string) bool {
+	switch arch {
+	case "arm", "arm64", "x86", "x86_64":
+	default:
+		return false
+	}
+	if version == "" || len(version) > 32 {
+		return false
+	}
+	for _, r := range version {
+		if !(r >= '0' && r <= '9' || r == '.') {
+			return false
+		}
+	}
+	return true
+}
+
 func (f *FridaServer) download(ctx context.Context, arch, version string) (string, error) {
+	if !fridaVersionArchOK(arch, version) {
+		return "", fmt.Errorf("download frida-server: bad version %q or arch %q", version, arch)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	dir, err := f.cacheDir()
@@ -121,7 +151,11 @@ func (f *FridaServer) download(ctx context.Context, arch, version string) (strin
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download frida-server %s: %s (check the version exists)", version, resp.Status)
 	}
-	xr, err := xz.NewReader(resp.Body)
+	// Bound both directions: a hostile or broken endpoint must not be
+	// able to stream an endless body or decompress without limit.
+	const maxCompressed = 128 << 20
+	const maxBinary = 512 << 20
+	xr, err := xz.NewReader(io.LimitReader(resp.Body, maxCompressed+1))
 	if err != nil {
 		return "", fmt.Errorf("download frida-server %s: xz stream: %w", version, err)
 	}
@@ -140,19 +174,29 @@ func (f *FridaServer) download(ctx context.Context, arch, version string) (strin
 		tmp.Close()
 		return "", fmt.Errorf("download frida-server %s: payload is not an ELF binary", version)
 	}
-	if _, err := tmp.Write(head); err != nil {
+	sum := sha256.New()
+	mw := io.MultiWriter(tmp, sum)
+	if _, err := mw.Write(head); err != nil {
 		tmp.Close()
 		return "", err
 	}
-	written, err := io.Copy(tmp, xr)
+	written, err := io.Copy(mw, io.LimitReader(xr, maxBinary))
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
 	if err != nil {
 		return "", fmt.Errorf("download frida-server %s: %w", version, err)
 	}
+	if written+4 >= maxBinary {
+		return "", fmt.Errorf("download frida-server %s: decompressed beyond %d bytes", version, maxBinary)
+	}
 	if written+4 < 1<<20 {
 		return "", fmt.Errorf("download frida-server %s: suspiciously small (%d bytes)", version, written+4)
+	}
+	if want, pinned := f.Checksums[name]; pinned {
+		if got := hex.EncodeToString(sum.Sum(nil)); !strings.EqualFold(got, want) {
+			return "", fmt.Errorf("download frida-server %s: sha256 mismatch (got %s, pinned %s)", version, got, want)
+		}
 	}
 	if err := os.Rename(tmpPath, dest); err != nil {
 		return "", err

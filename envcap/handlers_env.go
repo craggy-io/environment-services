@@ -148,7 +148,7 @@ func (s *set) handleStatus(ctx context.Context, call *call) (any, error) {
 
 	var cols []map[string]any
 	for _, rc := range s.deps.Manager.RunningCollectors() {
-		if in.Env != "" && rc.Source != in.Env {
+		if !seen[rc.Source] {
 			continue
 		}
 		cols = append(cols, map[string]any{"collector": rc.ID, "name": rc.Name, "env": rc.Source, "streams": rc.Streams})
@@ -162,8 +162,12 @@ func (s *set) handleStatus(ctx context.Context, call *call) (any, error) {
 	}
 	out["pins"] = pins
 
+	myRules, myRuleNames := s.ownedRules(owner)
 	var rs []map[string]any
 	for _, ri := range s.deps.Manager.ListRules() {
+		if !myRules[ri.Instance] {
+			continue
+		}
 		m := map[string]any{"rule": ri.Rule, "instance": ri.Instance, "version": ri.Version, "state": ri.State, "triggers": ri.Triggers}
 		if !ri.LastTrigger.IsZero() {
 			m["last_trigger"] = ri.LastTrigger.Format(time.RFC3339)
@@ -173,6 +177,9 @@ func (s *set) handleStatus(ctx context.Context, call *call) (any, error) {
 	out["rules"] = rs
 	var trigs []map[string]any
 	for _, t := range s.deps.Manager.RecentRuleTriggers(time.Now().Add(-time.Hour), "") {
+		if !myRuleNames[t.Rule] {
+			continue
+		}
 		trigs = append(trigs, map[string]any{"rule": t.Rule, "kind": t.Kind, "time": t.Time.Format(time.RFC3339), "capture": t.CaptureID})
 	}
 	if len(trigs) > 0 {

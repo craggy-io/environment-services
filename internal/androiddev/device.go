@@ -56,6 +56,9 @@ func installAPK(ctx context.Context, client apkInstaller, serial string, apk io.
 
 // Uninstall removes a package.
 func (d *Device) Uninstall(ctx context.Context, pkg string) error {
+	if err := validatePackageName(pkg); err != nil {
+		return err
+	}
 	out, code, err := d.Shell(ctx, "pm uninstall "+pkg)
 	if err != nil {
 		return err
@@ -157,6 +160,9 @@ func (d *Device) ForegroundPackage(ctx context.Context) string {
 
 // StartApp launches a package's main activity via monkey.
 func (d *Device) StartApp(ctx context.Context, pkg string) error {
+	if err := validatePackageName(pkg); err != nil {
+		return err
+	}
 	out, _, err := d.Shell(ctx, fmt.Sprintf("monkey -p %s -c android.intent.category.LAUNCHER 1", pkg))
 	if err != nil {
 		return err
@@ -170,6 +176,9 @@ func (d *Device) StartApp(ctx context.Context, pkg string) error {
 // ForceStop stops a package. The supervisor never calls this during
 // repairs (only agents/direct callers may).
 func (d *Device) ForceStop(ctx context.Context, pkg string) error {
+	if err := validatePackageName(pkg); err != nil {
+		return err
+	}
 	_, _, err := d.Shell(ctx, "am force-stop "+pkg)
 	return err
 }
