@@ -73,6 +73,40 @@ func (d *Adapter) imagePackage(o *envspec.AndroidOptions) string {
 	return pkg
 }
 
+// installImage installs a system image. Newer command-line tools carry
+// the Android CLI (android sdk install, paths with slashes) and make
+// sdkmanager a wrapper of it that takes a semicolon path for four packages
+// not found, and still exits 0: the image was never installed and
+// avdmanager failed after it. So the CLI is used when it is there, and an
+// install that leaves no image is an error either way.
+func (d *Adapter) installImage(ctx context.Context, pkg string) error {
+	bin, args := d.sdkManager(), []string{"--sdk_root=" + d.SDK, "--install", pkg}
+	if cli := d.androidCLI(); cli != "" {
+		bin, args = cli, []string{"--sdk=" + d.SDK, "sdk", "install", strings.ReplaceAll(pkg, ";", "/")}
+	}
+	out, err := runToolInput(ctx, bin, args, "y\ny\ny\ny\ny\n", sdkEnv(d.SDK, d.avdHome()))
+	if err != nil {
+		return fmt.Errorf("android: install %s: %w\n%s", pkg, err, tailLines(string(out), 20))
+	}
+	if !d.packageInstalled(pkg) {
+		return fmt.Errorf("android: install %s left no image in the SDK\n%s", pkg, tailLines(string(out), 20))
+	}
+	return nil
+}
+
+// androidCLI is the Android CLI of the command-line tools, or "".
+func (d *Adapter) androidCLI() string {
+	name := "android"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	cli := filepath.Join(d.SDK, "cmdline-tools", "latest", "bin", name)
+	if info, err := os.Stat(cli); err == nil && !info.IsDir() {
+		return cli
+	}
+	return ""
+}
+
 // packageInstalled says whether an sdkmanager package is in the SDK.
 func (d *Adapter) packageInstalled(pkg string) bool {
 	dir := filepath.Join(d.SDK, filepath.FromSlash(strings.ReplaceAll(pkg, ";", "/")))
@@ -170,9 +204,8 @@ func (d *Adapter) PrepareProfile(ctx context.Context, p envspec.Profile, progres
 	if !d.imageInstalled(o) {
 		pkg := d.imagePackage(o)
 		report("sdk-install", "installing "+pkg+" (several GB)")
-		out, err := runTool(ctx, d.sdkManager(), []string{"--sdk_root=" + d.SDK, "--install", pkg}, sdkEnv(d.SDK, d.avdHome()))
-		if err != nil {
-			return fmt.Errorf("android: sdkmanager install %s: %w\n%s", pkg, err, tailLines(string(out), 20))
+		if err := d.installImage(ctx, pkg); err != nil {
+			return err
 		}
 	}
 	if !d.avdExists(key) {
