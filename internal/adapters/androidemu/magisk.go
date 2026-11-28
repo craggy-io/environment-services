@@ -97,7 +97,7 @@ func (d *Adapter) prepareMagisk(ctx context.Context, avdName string, o *envspec.
 		}
 		report("base-avd", "existing magisk-ramdisk.img did not verify; re-patching")
 	}
-	pkg := ImagePackage(o.API, o.Image, o.ABI)
+	pkg := d.imagePackage(o)
 	ramdiskSrc := filepath.Join(d.SDK, filepath.FromSlash(strings.ReplaceAll(pkg, ";", "/")), "ramdisk.img")
 	stock, err := os.ReadFile(ramdiskSrc)
 	if err != nil {

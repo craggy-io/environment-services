@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,6 +44,44 @@ func ImagePackage(api int, kind envspec.ImageKind, abi string) string {
 		abi = DefaultABI(runtime.GOARCH)
 	}
 	return fmt.Sprintf("system-images;android-%d;%s;%s", api, flavour, abi)
+}
+
+// imagePackage is the sdkmanager package of a variant as this SDK names
+// it. Since API 37 Google names a platform's images by its minor release
+// too (system-images;android-37.0;...), and an API level may have several
+// (android-36.1): the one installed is used, else the newest-looking name
+// to install. Asking for android-37 found no image, installed nothing and
+// failed creating the AVD.
+func (d *Adapter) imagePackage(o *envspec.AndroidOptions) string {
+	pkg := ImagePackage(o.API, o.Image, o.ABI)
+	if d.packageInstalled(pkg) {
+		return pkg
+	}
+	parts := strings.Split(pkg, ";")
+	matches, _ := filepath.Glob(filepath.Join(d.SDK, "system-images", fmt.Sprintf("android-%d.*", o.API), parts[2], parts[3]))
+	sort.Strings(matches)
+	for i := len(matches) - 1; i >= 0; i-- {
+		release := filepath.Base(filepath.Dir(filepath.Dir(matches[i])))
+		named := strings.Join([]string{parts[0], release, parts[2], parts[3]}, ";")
+		if d.packageInstalled(named) {
+			return named
+		}
+	}
+	if o.API >= 37 {
+		return strings.Join([]string{parts[0], fmt.Sprintf("android-%d.0", o.API), parts[2], parts[3]}, ";")
+	}
+	return pkg
+}
+
+// packageInstalled says whether an sdkmanager package is in the SDK.
+func (d *Adapter) packageInstalled(pkg string) bool {
+	dir := filepath.Join(d.SDK, filepath.FromSlash(strings.ReplaceAll(pkg, ";", "/")))
+	for _, name := range []string{"system.img", "package.xml"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // VariantKey identifies one base AVD per (image, root, magisk) tuple.
@@ -84,14 +123,7 @@ func (d *Adapter) variantOptions(p envspec.Profile) *envspec.AndroidOptions {
 }
 
 func (d *Adapter) imageInstalled(o *envspec.AndroidOptions) bool {
-	pkg := ImagePackage(o.API, o.Image, o.ABI)
-	dir := filepath.Join(d.SDK, filepath.FromSlash(strings.ReplaceAll(pkg, ";", "/")))
-	_, err := os.Stat(filepath.Join(dir, "system.img"))
-	if err == nil {
-		return true
-	}
-	_, err = os.Stat(filepath.Join(dir, "package.xml"))
-	return err == nil
+	return d.packageInstalled(d.imagePackage(o))
 }
 
 func (d *Adapter) avdExists(key string) bool {
@@ -109,7 +141,7 @@ func (d *Adapter) cleanSnapshotExists(key string) bool {
 func (d *Adapter) ProfilePrepared(p envspec.Profile) error {
 	o := d.variantOptions(p)
 	if !d.imageInstalled(o) {
-		return fmt.Errorf("system image %s not installed", ImagePackage(o.API, o.Image, o.ABI))
+		return fmt.Errorf("system image %s not installed", d.imagePackage(o))
 	}
 	key := VariantKey(o)
 	if !d.avdExists(key) {
@@ -136,7 +168,7 @@ func (d *Adapter) PrepareProfile(ctx context.Context, p envspec.Profile, progres
 	}
 	key := VariantKey(o)
 	if !d.imageInstalled(o) {
-		pkg := ImagePackage(o.API, o.Image, o.ABI)
+		pkg := d.imagePackage(o)
 		report("sdk-install", "installing "+pkg+" (several GB)")
 		out, err := runTool(ctx, d.sdkManager(), []string{"--sdk_root=" + d.SDK, "--install", pkg}, sdkEnv(d.SDK, d.avdHome()))
 		if err != nil {
@@ -145,7 +177,7 @@ func (d *Adapter) PrepareProfile(ctx context.Context, p envspec.Profile, progres
 	}
 	if !d.avdExists(key) {
 		report("base-avd", "creating base AVD "+key)
-		pkg := ImagePackage(o.API, o.Image, o.ABI)
+		pkg := d.imagePackage(o)
 		out, err := runToolInput(ctx, d.avdManager(), []string{
 			"create", "avd", "--force",
 			"--name", key, "--package", pkg, "--device", "pixel_6",
