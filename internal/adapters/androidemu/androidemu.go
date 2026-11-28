@@ -198,6 +198,10 @@ func sdkEnv(sdk, avdHome string) []string {
 	set("ANDROID_SDK_ROOT", sdk)
 	set("ANDROID_HOME", sdk)
 	set("ANDROID_AVD_HOME", avdHome)
+	// The SDK's tools are Java programs: give them the Java found.
+	if home, _ := javaHome(studioRuntimes()); home != "" {
+		set("JAVA_HOME", home)
+	}
 	return env
 }
 
@@ -242,6 +246,10 @@ func (d *Adapter) Check(ctx context.Context) error {
 	}
 	if _, err := os.Stat(d.emulatorBin()); err != nil {
 		return fmt.Errorf("android: emulator binary: %w", err)
+	}
+	if _, found := javaHome(studioRuntimes()); !found {
+		return withHint(fmt.Errorf("%w: no Java to run sdkmanager and avdmanager: JAVA_HOME not set, no java on the PATH and no Android Studio runtime", adapter.ErrBackendDown),
+			"install a JDK or Android Studio, or set JAVA_HOME")
 	}
 	return os.MkdirAll(d.avdHome(), 0o755)
 }
