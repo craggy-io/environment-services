@@ -67,13 +67,26 @@ func fridaPort(o *envspec.FridaOptions) int {
 	return 27042
 }
 
-// hostFridaVersion returns the host frida client's version, if installed.
+// hostFridaVersion returns the host frida client's version, if installed:
+// the frida command's, else the frida module's of the Python the collector
+// runs. pip --user puts the command in a Scripts folder that is often not
+// on the PATH, and with no version no frida-server was chosen, though the
+// Python the hooks run through had frida.
 func hostFridaVersion() string {
-	bin, err := osexec.LookPath("frida")
+	if bin, err := osexec.LookPath("frida"); err == nil {
+		if out, err := osexec.Command(bin, "--version").Output(); err == nil {
+			if v := strings.TrimSpace(string(out)); v != "" {
+				return v
+			}
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	py, err := fridaPython(ctx)
 	if err != nil {
 		return ""
 	}
-	out, err := osexec.Command(bin, "--version").Output()
+	out, err := osexec.CommandContext(ctx, py, "-c", "import frida; print(frida.__version__)").Output()
 	if err != nil {
 		return ""
 	}
