@@ -268,7 +268,7 @@ func viewInfo(info envspec.Info) agentEnvInfo {
 	}
 	for _, c := range info.Components {
 		v.Components = append(v.Components, componentView{Name: c.Name, State: c.State,
-			Detail: c.LastFailure, Repairs: c.Repairs})
+			Detail: componentDetail(c.State, c.LastFailure), Repairs: c.Repairs})
 	}
 	return v
 }
@@ -286,4 +286,14 @@ func inputSchema[T any]() *jsonschema.Schema {
 		panic(fmt.Sprintf("envcap: input schema for %v: %v", reflect.TypeFor[T](), err))
 	}
 	return sch
+}
+
+// componentDetail is what a component's view says beside its state. A last
+// failure a repair has since fixed is said to be past: given as it was, a
+// working frida read "frida-server not running".
+func componentDetail(state, lastFailure string) string {
+	if lastFailure == "" || state != "ok" {
+		return lastFailure
+	}
+	return "repaired; it last failed: " + lastFailure
 }
