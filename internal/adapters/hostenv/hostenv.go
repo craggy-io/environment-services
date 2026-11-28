@@ -291,7 +291,16 @@ func (a *Adapter) Open(ctx context.Context, op adapter.OpContext, ref adapter.Re
 	}
 	j, err := openJob(st.JobName)
 	if err != nil {
-		return nil, fmt.Errorf("hostenv: reopen job for %s: %w", envID, err)
+		// A job object goes with the last handle to it: after the manager
+		// restarts there is none to reopen. With none of the env's
+		// processes alive nothing escapes a new one, and without one the
+		// env could never be released (stuck releasing, its workspace kept).
+		if len(verifiedProcs(st.Procs)) > 0 {
+			return nil, fmt.Errorf("hostenv: reopen job for %s: %w", envID, err)
+		}
+		if j, err = createJob(st.JobName, st.Spec.Resources.MemoryMB, 256); err != nil {
+			return nil, fmt.Errorf("hostenv: job for %s is gone and a new one could not be made: %w", envID, err)
+		}
 	}
 	inst := &Instance{ad: a, envID: st.Env, spec: st.Spec, root: filepath.Dir(st.Workspace),
 		workspace: st.Workspace, job: j, credEnv: map[string]string{}, running: map[int]*osexec.Cmd{}}
